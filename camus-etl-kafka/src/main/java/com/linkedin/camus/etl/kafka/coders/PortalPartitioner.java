@@ -34,8 +34,7 @@ public class PortalPartitioner extends Partitioner {
         String portal = splitParts[0];
         String encodedPartition = splitParts[1];
         DateTime bucket = new DateTime(Long.valueOf(encodedPartition));
-        sb.append(bucket.toString(outputDateFormatter));
-        sb.append("/").append(portal);
+        sb.append(portal).append("/").append(bucket.toString(outputDateFormatter));
         return sb.toString();
     }
 
