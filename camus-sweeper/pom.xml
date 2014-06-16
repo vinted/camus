@@ -15,8 +15,7 @@
 	<dependencies>
 		<dependency>
 			<groupId>org.apache.hadoop</groupId>
-			<artifactId>hadoop-core</artifactId>
-			<version>1.0.4</version>
+			<artifactId>hadoop-client</artifactId>
 		</dependency>
 
 		<dependency>
@@ -29,6 +28,7 @@
 			<groupId>org.apache.avro</groupId>
 			<artifactId>avro-mapred</artifactId>
 			<version>1.7.4</version>
+			<classifier>hadoop2</classifier>
 		</dependency>
 
 		<dependency>
