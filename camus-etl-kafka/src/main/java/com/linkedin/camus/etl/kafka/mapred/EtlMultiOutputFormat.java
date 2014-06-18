@@ -185,16 +185,16 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
 
     public static String getWorkingFileName(JobContext context, EtlKey key) throws IOException {
         Partitioner partitioner = getPartitioner(context, key.getTopic());
-        return "data." + key.getTopic().replaceAll("\\.", "_") + "." + key.getLeaderId() + "." + key.getPartition() + "." + partitioner.encodePartition(context, key);
+        return "data." + key.getTopic() + "_._" + key.getLeaderId() + "." + key.getPartition() + "." + partitioner.encodePartition(context, key);
     }
-    
+
     public static void setDefaultPartitioner(JobContext job, Class<?> cls) {
       job.getConfiguration().setClass(ETL_DEFAULT_PARTITIONER_CLASS, cls, Partitioner.class);
     }
-    
+
     public static Partitioner getDefaultPartitioner(JobContext job) {
         return ReflectionUtils.newInstance(job.getConfiguration().getClass(ETL_DEFAULT_PARTITIONER_CLASS, DefaultPartitioner.class, Partitioner.class), job.getConfiguration());
-    }    
+    }
 
     public static Partitioner getPartitioner(JobContext job, String topicName) throws IOException {
         String customPartitionerProperty = ETL_DEFAULT_PARTITIONER_CLASS + "." + topicName;
