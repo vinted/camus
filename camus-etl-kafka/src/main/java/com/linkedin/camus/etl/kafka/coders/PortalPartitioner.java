@@ -22,7 +22,7 @@ public class PortalPartitioner extends Partitioner {
     public String encodePartition(JobContext context, IEtlKey key) {
         long outfilePartitionMs = EtlMultiOutputFormat.getEtlOutputFileTimePartitionMins(context) * 60000L;
         String portal = key.getPartitionMap().get(new Text("portal")).toString();
-        return ""+portal+"_"+DateUtils.getPartition(outfilePartitionMs, key.getTime(), outputDateFormatter.getZone());
+        return ""+portal+"___"+DateUtils.getPartition(outfilePartitionMs, key.getTime(), outputDateFormatter.getZone());
     }
 
     @Override
@@ -30,7 +30,7 @@ public class PortalPartitioner extends Partitioner {
         StringBuilder sb = new StringBuilder();
         sb.append(topic).append("/");
         sb.append(EtlMultiOutputFormat.getDestPathTopicSubDir(context)).append("/");
-        String[] splitParts = encodedParts.split("_");
+        String[] splitParts = encodedParts.split("___");
         String portal = splitParts[0];
         String encodedPartition = splitParts[1];
         DateTime bucket = new DateTime(Long.valueOf(encodedPartition));
