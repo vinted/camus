@@ -14,7 +14,7 @@ import org.apache.hadoop.io.Text;
 
 public class PortalPartitioner extends Partitioner {
 
-    protected static final String OUTPUT_DATE_FORMAT = "YYYY/MM/dd/HH";
+    protected static final String OUTPUT_DATE_FORMAT = "'year='YYYY/'month='MM/'day'=dd";
     //protected DateTimeZone outputDateTimeZone = null;
     protected DateTimeFormatter outputDateFormatter = null;
 
@@ -34,7 +34,7 @@ public class PortalPartitioner extends Partitioner {
         String portal = splitParts[0];
         String encodedPartition = splitParts[1];
         DateTime bucket = new DateTime(Long.valueOf(encodedPartition));
-        sb.append(portal).append("/").append(bucket.toString(outputDateFormatter));
+        sb.append("portal="+portal).append("/").append(bucket.toString(outputDateFormatter));
         return sb.toString();
     }
 
