@@ -18,7 +18,7 @@ public class CamusSweeperPortalDatePartitionPlanner extends CamusSweeperPlanner
 {
   private DateTimeFormatter dayFormatter;
   private DateUtils dUtils;
-  
+
   @Override
   public CamusSweeperPlanner setPropertiesLogger(Properties props, Logger log)
   {
@@ -26,10 +26,10 @@ public class CamusSweeperPortalDatePartitionPlanner extends CamusSweeperPlanner
     dayFormatter = dUtils.getDateTimeFormatter("YYYY/MM/dd");
     return super.setPropertiesLogger(props, log);
   }
-  
+
   @Override
   public List<Properties> createSweeperJobProps(String topic, Path inputDir, Path outputDir, FileSystem fs) throws IOException
-  {  
+  {
     int daysAgo = Integer.parseInt(props.getProperty("days.ago", "0"));
     int numDays = Integer.parseInt(props.getProperty("num.days", "15"));
     String[] portals = null;
@@ -50,7 +50,7 @@ public class CamusSweeperPortalDatePartitionPlanner extends CamusSweeperPlanner
       jobProps.putAll(props);
 
       jobProps.put("topic", topic);
-      
+
       for (String portal : portals) {
 	      DateTime currentDate = startDate.minusDays(i);
 	      String directory = portal + "/" + dayFormatter.print(currentDate);
@@ -66,7 +66,7 @@ public class CamusSweeperPortalDatePartitionPlanner extends CamusSweeperPlanner
 	      String source = sourcePaths.toString().substring(1, sourcePaths.toString().length() - 1);
 	      jobProps.put("input.paths", source);
 	      jobProps.put("dest.path", destPath.toString());
-	      
+
 	      if (!fs.exists(destPath))
 	      {
 		System.out.println(topic + " dest dir " + directory + " doesn't exist or . Processing.");
@@ -76,10 +76,10 @@ public class CamusSweeperPortalDatePartitionPlanner extends CamusSweeperPlanner
 	      {
 		System.out.println(topic + " dest dir " + directory + " has a modified time before the source. Reprocessing.");
 		sourcePaths.add(destPath);
-		
+
 		source = sourcePaths.toString().substring(1, sourcePaths.toString().length() - 1);
 		jobProps.put("input.paths", source);
-		
+
 		jobPropsList.add(jobProps);
 	      }
 	      else
@@ -88,11 +88,11 @@ public class CamusSweeperPortalDatePartitionPlanner extends CamusSweeperPlanner
 	      }
          }
     }
-    
+
     return jobPropsList;
 
   }
-  
-  
+
+
 
 }

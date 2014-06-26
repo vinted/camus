@@ -114,7 +114,7 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
         offsetWriter.close();
         super.commitTask(context);
     }
-    
+
     protected void commitFile(JobContext job, Path source, Path target) throws IOException{
       FileSystem.get(job.getConfiguration()).rename(source, target);
     }
