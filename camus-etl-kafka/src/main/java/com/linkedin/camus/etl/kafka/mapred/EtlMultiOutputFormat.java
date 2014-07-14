@@ -85,7 +85,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                 .getClass(ETL_RECORD_WRITER_PROVIDER_CLASS,
                         AvroRecordWriterProvider.class);
     }
-    
+
     public static RecordWriterProvider getRecordWriterProvider(JobContext job) {
         try
         {
@@ -120,7 +120,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     }
 
     public static Path getDestPathTopicSubDir(JobContext job) {
-        return new Path(job.getConfiguration().get(ETL_DESTINATION_PATH_TOPIC_SUBDIRECTORY, "hourly"));
+        return new Path(job.getConfiguration().get(ETL_DESTINATION_PATH_TOPIC_SUBDIRECTORY, "stage=hourly"));
     }
 
     public static void setMonitorTimeGranularityMins(JobContext job, int mins) {
@@ -134,7 +134,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     public static long getMonitorTimeGranularityMs(JobContext job) {
       return job.getConfiguration().getInt(KAFKA_MONITOR_TIME_GRANULARITY_MS, 10) * 60000L;
     }
-    
+
     public static void setEtlAvroWriterSyncInterval(JobContext job, int val) {
         job.getConfiguration().setInt(ETL_AVRO_WRITER_SYNC_INTERVAL, val);
     }

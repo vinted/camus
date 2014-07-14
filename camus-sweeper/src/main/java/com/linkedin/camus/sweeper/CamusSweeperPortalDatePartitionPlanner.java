@@ -23,7 +23,7 @@ public class CamusSweeperPortalDatePartitionPlanner extends CamusSweeperPlanner
   public CamusSweeperPlanner setPropertiesLogger(Properties props, Logger log)
   {
     dUtils = new DateUtils(props);
-    dayFormatter = dUtils.getDateTimeFormatter("YYYY/MM/dd");
+    dayFormatter = dUtils.getDateTimeFormatter("'year='YYYY/'month='MM/'day'=dd");
     return super.setPropertiesLogger(props, log);
   }
 
@@ -53,7 +53,7 @@ public class CamusSweeperPortalDatePartitionPlanner extends CamusSweeperPlanner
 
       for (String portal : portals) {
 	      DateTime currentDate = startDate.minusDays(i);
-	      String directory = portal + "/" + dayFormatter.print(currentDate);
+	      String directory = "country=" + portal + "/" + dayFormatter.print(currentDate);
 
 	      List<Path> sourcePaths = Collections.singletonList(new Path(inputDir, directory));
 	      if (!fs.exists(sourcePaths.get(0)))

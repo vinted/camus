@@ -14,7 +14,7 @@ import org.apache.hadoop.io.Text;
 
 public class PortalPartitioner extends Partitioner {
 
-    protected static final String OUTPUT_DATE_FORMAT = "YYYY/MM/dd";
+    protected static final String OUTPUT_DATE_FORMAT = "'year='YYYY/'month='MM/'day'=dd";
     //protected DateTimeZone outputDateTimeZone = null;
     protected DateTimeFormatter outputDateFormatter = null;
 
@@ -22,8 +22,8 @@ public class PortalPartitioner extends Partitioner {
     public String encodePartition(JobContext context, IEtlKey key) {
         long outfilePartitionMs = EtlMultiOutputFormat.getEtlOutputFileTimePartitionMins(context) * 60000L;
         // extract portal from avro record, make it a partition key
-        String service = key.getPartitionMap().get(new Text("portal")).toString();
-        return ""+service+"___"+DateUtils.getPartition(outfilePartitionMs, key.getTime(), outputDateFormatter.getZone());
+        String country = key.getPartitionMap().get(new Text("portal")).toString();
+        return ""+country+"___"+DateUtils.getPartition(outfilePartitionMs, key.getTime(), outputDateFormatter.getZone());
     }
 
     @Override
@@ -32,10 +32,10 @@ public class PortalPartitioner extends Partitioner {
         sb.append(topic).append("/");
         sb.append(EtlMultiOutputFormat.getDestPathTopicSubDir(context)).append("/");
         String[] splitParts = encodedParts.split("___");
-        String service = splitParts[0];
+        String country = splitParts[0];
         String encodedPartition = splitParts[1];
         DateTime bucket = new DateTime(Long.valueOf(encodedPartition));
-        sb.append(service).append("/").append(bucket.toString(outputDateFormatter));
+        sb.append("country="+country).append("/").append(bucket.toString(outputDateFormatter));
         return sb.toString();
     }
 
