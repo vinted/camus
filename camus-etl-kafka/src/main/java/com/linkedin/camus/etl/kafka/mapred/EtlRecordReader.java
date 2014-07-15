@@ -102,7 +102,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
         } else {
             beginTimeStamp = 0;
         }
-        
+
         ignoreServerServiceList = new HashSet<String>();
         for(String ignoreServerServiceTopic : EtlInputFormat.getEtlAuditIgnoreServiceTopicList(context))
         {
@@ -242,9 +242,9 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
                     long checksum = key.getChecksum();
                     if (checksum != messageWithKey.checksum() && checksum != messageWithoutKey.checksum()) {
                     	throw new ChecksumException("Invalid message checksum : MessageWithKey : "
-                              + messageWithKey.checksum() + " MessageWithoutKey checksum : " 
-                    		  + messageWithoutKey.checksum() 
-                    		  + ". Expected " + key.getChecksum(),	
+                              + messageWithKey.checksum() + " MessageWithoutKey checksum : "
+                    		  + messageWithoutKey.checksum()
+                    		  + ". Expected " + key.getChecksum(),
                     		  key.getOffset());
                     }
 
@@ -338,7 +338,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
             }
         }
     }
-    
+
     public void setServerService()
     {
     	if(ignoreServerServiceList.contains(key.getTopic()) || ignoreServerServiceList.contains("all"))
