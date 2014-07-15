@@ -15,15 +15,14 @@ import org.apache.hadoop.io.Text;
 public class PortalPartitioner extends Partitioner {
 
     protected static final String OUTPUT_DATE_FORMAT = "'year='YYYY/'month='MM/'day'=dd";
-    //protected DateTimeZone outputDateTimeZone = null;
-    protected DateTimeFormatter outputDateFormatter = null;
 
     @Override
     public String encodePartition(JobContext context, IEtlKey key) {
         long outfilePartitionMs = EtlMultiOutputFormat.getEtlOutputFileTimePartitionMins(context) * 60000L;
         // extract portal from avro record, make it a partition key
         String country = key.getPartitionMap().get(new Text("portal")).toString();
-        return ""+country+"___"+DateUtils.getPartition(outfilePartitionMs, key.getTime(), outputDateFormatter.getZone());
+        DateTimeFormatter portalOutputDateFormatter = dateFormatterForPortal(context, country);
+        return ""+country+"___"+DateUtils.getPartition(outfilePartitionMs, key.getTime(), portalOutputDateFormatter.getZone());
     }
 
     @Override
@@ -34,18 +33,19 @@ public class PortalPartitioner extends Partitioner {
         String[] splitParts = encodedParts.split("___");
         String country = splitParts[0];
         String encodedPartition = splitParts[1];
+        DateTimeFormatter portalOutputDateFormatter = dateFormatterForPortal(context, country);
         DateTime bucket = new DateTime(Long.valueOf(encodedPartition));
-        sb.append("country="+country).append("/").append(bucket.toString(outputDateFormatter));
+        sb.append("country="+country).append("/").append(bucket.toString(portalOutputDateFormatter));
         return sb.toString();
     }
 
     @Override
     public void setConf(Configuration conf)
     {
-        if (conf != null){
-        	outputDateFormatter = DateUtils.getDateTimeFormatter(OUTPUT_DATE_FORMAT,DateTimeZone.forID(conf.get(EtlMultiOutputFormat.ETL_DEFAULT_TIMEZONE, "America/Los_Angeles")));
-        }
-
         super.setConf(conf);
+    }
+
+    private DateTimeFormatter dateFormatterForPortal(JobContext context, String portal) {
+        return DateUtils.getDateTimeFormatter(OUTPUT_DATE_FORMAT, DateTimeZone.forID(EtlMultiOutputFormat.getTimeZoneForPortal(context, portal)));
     }
 }
