@@ -14,7 +14,7 @@ import org.joda.time.format.DateTimeFormatter;
 
 import com.linkedin.camus.sweeper.utils.DateUtils;
 
-public class CamusSweeperDatePartitionPlanner extends CamusSweeperPlanner
+public class CamusSweeperHiveDatePartitionPlanner extends CamusSweeperPlanner
 {
   private DateTimeFormatter dayFormatter;
   private DateUtils dUtils;
@@ -23,7 +23,7 @@ public class CamusSweeperDatePartitionPlanner extends CamusSweeperPlanner
   public CamusSweeperPlanner setPropertiesLogger(Properties props, Logger log)
   {
     dUtils = new DateUtils(props);
-    dayFormatter = dUtils.getDateTimeFormatter("YYYY/MM/dd");
+    dayFormatter = dUtils.getDateTimeFormatter("'year='YYYY/'month='MM/'day'=dd");
     return super.setPropertiesLogger(props, log);
   }
 
