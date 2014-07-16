@@ -142,12 +142,12 @@ public class VintedKafkaAvroMessageDecoder extends MessageDecoder<byte[], Record
 
 	    @Override
 	    public long getTimestamp() {
-	        Record header = (Record) super.getRecord().get("header");
+          Record record = (Record) super.getRecord();
 
-	        if (header != null && header.get("time") != null) {
-	            return (Long) header.get("time");
-	        } else if (super.getRecord().get("timestamp") != null) {
-	            return (Long) super.getRecord().get("timestamp");
+	        if (record.get("time") != null) {
+	            return (Long) record.get("time");
+	        } else if (record.get("timestamp") != null) {
+	            return (Long) record.get("timestamp");
 	        } else {
 	            return System.currentTimeMillis();
 	        }
