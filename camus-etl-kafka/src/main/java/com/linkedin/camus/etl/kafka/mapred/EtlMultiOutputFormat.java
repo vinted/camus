@@ -125,7 +125,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     }
 
     public static Path getDestPathTopicSubDir(JobContext job) {
-        return new Path(job.getConfiguration().get(ETL_DESTINATION_PATH_TOPIC_SUBDIRECTORY, "stage=hourly"));
+        return new Path(job.getConfiguration().get(ETL_DESTINATION_PATH_TOPIC_SUBDIRECTORY, "hourly"));
     }
 
     public static void setMonitorTimeGranularityMins(JobContext job, int mins) {
