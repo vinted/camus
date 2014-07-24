@@ -47,9 +47,7 @@ public class CamusSweeperHiveDatePartitionPlanner extends CamusSweeperPlanner
       DateTime currentDate = startDate.minusDays(i);
       String directory = dayFormatter.print(currentDate);
 
-      ArrayList<Path> sourcePaths =  new ArrayList<Path>();
-      sourcePaths.add(new Path(inputDir, directory));
-
+      List<Path> sourcePaths = Collections.singletonList(new Path(inputDir, directory));
       if (!fs.exists(sourcePaths.get(0)))
       {
         continue;
