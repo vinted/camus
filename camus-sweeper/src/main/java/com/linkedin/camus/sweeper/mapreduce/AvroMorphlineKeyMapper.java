@@ -92,8 +92,9 @@ public class AvroMorphlineKeyMapper extends Mapper<AvroKey<GenericRecord>, NullW
     outKey = new AvroKey<GenericRecord>();
     outKey.datum(new GenericData.Record(keySchema));
 
-    if (context.getNumReduceTasks() == 0)
+    if (context.getNumReduceTasks() == 0) {
       mapOnly = true;
+    }
   }
 
   @Override

@@ -72,7 +72,7 @@ public final class ToAvroRecordBuilder implements CommandBuilder {
 
         if (flatPath.contains("[]")) {
           // if field contains more then one value it originated from
-          // avro union, put all records back as an array
+          // avro array, put all records back as an array
           outputRecord.put(flatPath.replace("[]", ""), values);
         } else {
           for (Object value : values) {
