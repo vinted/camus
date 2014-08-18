@@ -11,7 +11,7 @@ import org.apache.log4j.Logger;
 public abstract class CamusSweeperJob
 {
   protected Logger log;
-  
+
   public CamusSweeperJob setLogger(Logger log)
   {
     this.log = log;
@@ -42,11 +42,11 @@ public abstract class CamusSweeperJob
     job.setOutputKeyClass(outKey);
     job.setOutputValueClass(outValue);
   }
-  
+
   protected String getConfValue(Job job, String topic, String key, String defaultStr){
     return job.getConfiguration().get(topic + "." + key, job.getConfiguration().get(key, defaultStr));
   }
-  
+
   protected String getConfValue(Job job, String topic, String key){
     return getConfValue(job, topic, key, null);
   }
