@@ -32,16 +32,17 @@ public class AvroMorphlineKeyMapper extends Mapper<AvroKey<GenericRecord>, NullW
 {
   private AvroKey<GenericRecord> outKey;
   private AvroValue<GenericRecord> outValue;
-  private boolean mapOnly = false;
   private Schema keySchema;
   private String topic;
   private String morphlineConfiguration;
 
   private static final class RecordEmitter implements Command {
     private final Mapper.Context context;
+    private final AvroKey<GenericRecord> outKey;
 
-    private RecordEmitter(Mapper.Context context) {
+    private RecordEmitter(Mapper.Context context, AvroKey<GenericRecord> outKey) {
       this.context = context;
+      this.outKey = outKey;
     }
 
     @Override
@@ -55,16 +56,57 @@ public class AvroMorphlineKeyMapper extends Mapper<AvroKey<GenericRecord>, NullW
 
     @Override
     public boolean process(Record record) {
-      AvroKey<GenericRecord> outKey = new AvroKey<GenericRecord>();
       GenericRecord avroRecord = (GenericRecord) record.get("_attachment_body").get(0);
-      outKey.datum(avroRecord);
+      AvroValue<GenericRecord> outValue = new AvroValue<GenericRecord>();
 
       try {
-        context.write(outKey, NullWritable.get());
+        outValue.datum(avroRecord);
+        projectData(avroRecord, outKey.datum());
+        context.write(outKey, outValue);
       } catch (Exception e) {
-        System.out.println("Cannot write record to context " + e);
+        throw new RuntimeException("Cannot write record to context " + e);
       }
+
       return true;
+    }
+
+    private void projectData(GenericRecord source, GenericRecord target)
+    {
+      for (Field fld : target.getSchema().getFields())
+      {
+        if (fld.schema().getType() == Type.UNION)
+        {
+          Object obj = source.get(fld.name());
+          Schema sourceSchema = GenericData.get().induce(obj);
+          if (sourceSchema.getType() == Type.RECORD){
+          for (Schema type : fld.schema().getTypes()){
+            if (type.getFullName().equals(sourceSchema.getFullName())){
+              GenericRecord record = new GenericData.Record(type);
+              target.put(fld.name(), record);
+              projectData((GenericRecord) obj, record);
+              break;
+            }
+          }
+          } else {
+            target.put(fld.name(), source.get(fld.name()));
+          }
+        }
+        else if (fld.schema().getType() == Type.RECORD)
+        {
+          GenericRecord record = (GenericRecord) target.get(fld.name());
+
+          if (record == null){
+            record = new GenericData.Record(fld.schema());
+            target.put(fld.name(), record);
+          }
+
+          projectData((GenericRecord) source.get(fld.name()), record);
+        }
+        else
+        {
+          target.put(fld.name(), source.get(fld.name()));
+        }
+      }
     }
   }
 
@@ -78,84 +120,31 @@ public class AvroMorphlineKeyMapper extends Mapper<AvroKey<GenericRecord>, NullW
   {
     Config morphlineTopicConfig = null;
     keySchema = AvroJob.getMapOutputKeySchema(context.getConfiguration());
+    System.out.println("output schema: " + keySchema);
     topic = context.getConfiguration().get("camus.sweeper.morphlines.topic");
     morphlineConfiguration = context.getConfiguration().get("camus.sweeper.morphlines.configuration");
-
-    RecordEmitter recordEmitter = new RecordEmitter(context);
-    MorphlineContext morphlineContext = new MorphlineContext.Builder().build();
-
-    morphlineConfig = ConfigFactory.parseString(morphlineConfiguration).getConfig("morphline");
-
-    morphline = new org.kitesdk.morphline.base.Compiler().compile(morphlineConfig, morphlineContext, recordEmitter);
 
     outValue = new AvroValue<GenericRecord>();
     outKey = new AvroKey<GenericRecord>();
     outKey.datum(new GenericData.Record(keySchema));
 
-    if (context.getNumReduceTasks() == 0) {
-      mapOnly = true;
-    }
+    RecordEmitter recordEmitter = new RecordEmitter(context, outKey);
+    MorphlineContext morphlineContext = new MorphlineContext.Builder().build();
+
+    morphlineConfig = ConfigFactory.parseString(morphlineConfiguration).getConfig("morphline");
+
+    morphline = new org.kitesdk.morphline.base.Compiler().compile(morphlineConfig, morphlineContext, recordEmitter);
   }
 
   @Override
   protected void map(AvroKey<GenericRecord> key, NullWritable value, Context context) throws IOException,
       InterruptedException
   {
-    if (mapOnly)
-    {
-      // context.write(key, NullWritable.get());
-      record.put(Fields.ATTACHMENT_BODY, key.datum());
-      if (!morphline.process(record)) {
-        // do not allow processing to continue if morphline fails
-        throw new RuntimeException("Morphline failed to process record: " + record + " with morphline config: " + morphlineConfig);
-      }
-      record.removeAll(Fields.ATTACHMENT_BODY);
+    record.put(Fields.ATTACHMENT_BODY, key.datum());
+    if (!morphline.process(record)) {
+      // do not allow processing to continue if morphline fails
+      throw new RuntimeException("Morphline failed to process record: " + record + " with morphline config: " + morphlineConfig);
     }
-    else
-    {
-      outValue.datum(key.datum());
-      projectData(key.datum(), outKey.datum());
-      context.write(outKey, outValue);
-    }
+    record.removeAll(Fields.ATTACHMENT_BODY);
   }
-
-  private void projectData(GenericRecord source, GenericRecord target)
-  {
-    for (Field fld : target.getSchema().getFields())
-    {
-      if (fld.schema().getType() == Type.UNION)
-      {
-        Object obj = source.get(fld.name());
-        Schema sourceSchema = GenericData.get().induce(obj);
-        if (sourceSchema.getType() == Type.RECORD){
-        for (Schema type : fld.schema().getTypes()){
-          if (type.getFullName().equals(sourceSchema.getFullName())){
-            GenericRecord record = new GenericData.Record(type);
-            target.put(fld.name(), record);
-            projectData((GenericRecord) obj, record);
-            break;
-          }
-        }
-        } else {
-          target.put(fld.name(), source.get(fld.name()));
-        }
-      }
-      else if (fld.schema().getType() == Type.RECORD)
-      {
-        GenericRecord record = (GenericRecord) target.get(fld.name());
-
-        if (record == null){
-          record = new GenericData.Record(fld.schema());
-          target.put(fld.name(), record);
-        }
-
-        projectData((GenericRecord) source.get(fld.name()), record);
-      }
-      else
-      {
-        target.put(fld.name(), source.get(fld.name()));
-      }
-    }
-  }
-
 }

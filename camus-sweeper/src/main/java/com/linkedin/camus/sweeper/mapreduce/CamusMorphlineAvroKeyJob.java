@@ -112,10 +112,10 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
     AvroJob.setInputKeySchema(job, schema);
 
     AvroJob.setMapOutputKeySchema(job, keySchema);
-    AvroJob.setMapOutputValueSchema(job, schema);
 
     Schema reducerSchema =
         new Schema.Parser().parse(getConfValue(job, topic, "camus.output.schema", schema.toString()));
+    AvroJob.setMapOutputValueSchema(job, reducerSchema);
     AvroJob.setOutputKeySchema(job, reducerSchema);
     log.info("Output Schema set to " + reducerSchema.toString());
   }
