@@ -7,6 +7,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.Iterator;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.ArrayList;
 
 import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.Schema;
@@ -28,6 +33,7 @@ import org.kitesdk.morphline.stdio.AbstractParser;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 
+import com.google.common.collect.ArrayListMultimap;
 
 /**
  * Command that converts a morphline record to an Avro record.
@@ -50,9 +56,7 @@ public final class ToAvroRecordBuilder implements CommandBuilder {
     }
 
     @Override
-    protected boolean doProcess(Record inputRecord) {
-      Record outputRecord = new Record();
-
+    protected boolean doProcess(Record record) {
       /*
         extractAvroTree command extracts Avro record fields with "/" prefixes
         whereas toAvro command expects Morphlines record field names to start
@@ -61,27 +65,26 @@ public final class ToAvroRecordBuilder implements CommandBuilder {
         for each record
       */
 
-      for (String path : inputRecord.getFields().keySet()) {
-        String flatPath = path;
+      ArrayListMultimap<String,Object> recordFieldCopy = ArrayListMultimap.create(record.getFields().size() + 16, 10);
+      recordFieldCopy.putAll(record.getFields());
+
+      for (String path : recordFieldCopy.keySet()) {
+        Collection<Object> values = new HashSet(recordFieldCopy.get(path));
+        String flatPath = new String(path);
 
         if (flatPath.startsWith("/")) {
           flatPath = flatPath.substring(1);
         }
-        flatPath = flatPath.replace("/", "_");
-        List values = inputRecord.get(path);
 
-        if (flatPath.contains("[]")) {
-          // if field contains more then one value it originated from
-          // avro array, put all records back as an array
-          outputRecord.put(flatPath.replace("[]", ""), values);
-        } else {
-          for (Object value : values) {
-            outputRecord.put(flatPath, value);
-          }
+        flatPath = flatPath.replace("/", "_");
+
+        for (Iterator<Object> it = values.iterator(); it.hasNext();) {
+          Object value = it.next();
+          record.getFields().put(flatPath, value);
         }
       }
 
-      return super.doProcess(outputRecord);
+      return super.doProcess(record);
     }
   }
 }
