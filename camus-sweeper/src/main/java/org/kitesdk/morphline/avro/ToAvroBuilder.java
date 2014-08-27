@@ -139,7 +139,7 @@ public final class ToAvroBuilder implements CommandBuilder {
         List list = inputRecord.get(morphlineFieldName);
 
         Object avroResult = AvroConversions.ERROR;
-        if (field.schema().getType() == Schema.Type.ARRAY || field.schema().getType() == Schema.Type.UNION) {
+        if (field.schema().getType() == Schema.Type.ARRAY || (field.schema().getType() == Schema.Type.UNION && list.size() != 0)) {
           avroResult = AvroConversions.toAvro(list, field);
         } else if (list.size() == 0) {
           try { // this will fail if there is no default value
