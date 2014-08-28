@@ -70,7 +70,9 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
     try {
       String destinationSchemaFormat = getConfValue(job, topic, "camus.sweeper.destination.schema.format");
       String schemaRegistryHost = getConfValue(job, topic, "camus.sweeper.schema.registry.host");
-      String latestSchemaPayload = IOUtils.toString(new URI(schemaRegistryHost + "/" + topic + "/latest." + destinationSchemaFormat), "UTF-8");
+      URI schemaURI = new URI(schemaRegistryHost + "/" + topic + "/latest." + destinationSchemaFormat);
+      log.info("Fetching latest schema from " + schemaURI);
+      String latestSchemaPayload = IOUtils.toString(schemaURI, "UTF-8");
       String latestSchema = latestSchemaPayload.split("\t")[1];
       job.getConfiguration().set(topic + ".camus.output.schema", latestSchema);
     }
@@ -87,7 +89,9 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
 
     try {
       String schemaRegistryHost = getConfValue(job, topic, "camus.sweeper.schema.registry.host");
-      String latestMorphlinePayload = IOUtils.toString(new URI(schemaRegistryHost + "/" + topic + "/latest.morphlines"), "UTF-8");
+      URI morphlinesURI = new URI(schemaRegistryHost + "/" + topic + "/latest.morphlines");
+      log.info("Fetching latest morphlines from URI " + morphlinesURI);
+      String latestMorphlinePayload = IOUtils.toString(morphlinesURI, "UTF-8");
       String latestMorphline = latestMorphlinePayload.split("\t")[1];
       job.getConfiguration().set("camus.sweeper.morphlines.configuration", latestMorphline);
       job.getConfiguration().set("camus.sweeper.morphlines.topic", topic);
