@@ -141,7 +141,9 @@ public final class ToAvroBuilder implements CommandBuilder {
         Object avroResult = AvroConversions.ERROR;
         if (field.schema().getType() == Schema.Type.ARRAY) {
           avroResult = AvroConversions.toAvro(list, field);
-        } else if (field.schema().getType() == Schema.Type.UNION && list.size() > 0) {
+        } else if (field.schema().getType() == Schema.Type.UNION && list.size() > 1) {
+          avroResult = AvroConversions.toAvro(list, field);
+        } else if (field.schema().getType() == Schema.Type.UNION && list.size() == 1 && arrayUnion(field.schema())) {
           avroResult = AvroConversions.toAvro(list, field);
         } else if (list.size() == 0) {
           try { // this will fail if there is no default value
@@ -165,7 +167,15 @@ public final class ToAvroBuilder implements CommandBuilder {
       // pass record to next command in chain:
       return super.doProcess(outputRecord);
     }
-
   }
 
+  private static boolean arrayUnion(Schema schema) {
+    for (Schema candidate : schema.getTypes()) {
+      if (candidate.getType() == Schema.Type.ARRAY) {
+        return true;
+      }
+    }
+
+    return false;
+  }
 }
