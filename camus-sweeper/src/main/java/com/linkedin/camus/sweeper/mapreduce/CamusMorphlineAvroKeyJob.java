@@ -42,15 +42,7 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
 
     // finding the newest file from our input. this file will contain the newest version of our avro
     // schema.
-    Schema schema;
-    try
-    {
-      schema = getNewestSchemaFromSource(job);
-    }
-    catch (IOException e)
-    {
-      throw new RuntimeException(e);
-    }
+    Schema schema = getNewestInputSchemaFromSource(job, topic);
 
     // checking if we have a key schema used for deduping. if we don't then we make this a map only
     // job and set the key schema
@@ -65,24 +57,6 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
     else
     {
       keySchema = new Schema.Parser().parse(keySchemaStr);
-    }
-
-    try {
-      String destinationSchemaFormat = getConfValue(job, topic, "camus.sweeper.destination.schema.format");
-      String schemaRegistryHost = getConfValue(job, topic, "camus.sweeper.schema.registry.host");
-      URI schemaURI = new URI(schemaRegistryHost + "/" + topic + "/latest." + destinationSchemaFormat);
-      log.info("Fetching latest schema from " + schemaURI);
-      String latestSchemaPayload = IOUtils.toString(schemaURI, "UTF-8");
-      String latestSchema = latestSchemaPayload.split("\t")[1];
-      job.getConfiguration().set(topic + ".camus.output.schema", latestSchema);
-    }
-    catch (java.net.URISyntaxException e)
-    {
-      throw new RuntimeException(e);
-    }
-    catch (java.io.IOException e)
-    {
-      throw new RuntimeException(e);
     }
 
     setupSchemas(topic, job, schema, keySchema);
@@ -117,72 +91,48 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
 
     AvroJob.setMapOutputKeySchema(job, keySchema);
 
-    Schema reducerSchema =
-        new Schema.Parser().parse(getConfValue(job, topic, "camus.output.schema", schema.toString()));
+    Schema reducerSchema = getNewestOutputSchemaFromSource(job, topic);
+
     AvroJob.setMapOutputValueSchema(job, reducerSchema);
     AvroJob.setOutputKeySchema(job, reducerSchema);
     log.info("Output Schema set to " + reducerSchema.toString());
   }
 
-  private Schema getNewestSchemaFromSource(Job job) throws IOException
+  private Schema getNewestInputSchemaFromSource(Job job, String topic)
   {
-    FileSystem fs = FileSystem.get(job.getConfiguration());
-    Path[] sourceDirs = FileInputFormat.getInputPaths(job);
-
-    List<FileStatus> files = new ArrayList<FileStatus>();
-
-    for (Path sourceDir : sourceDirs)
-    {
-      files.addAll(Arrays.asList(fs.listStatus(sourceDir)));
-    }
-
-    Collections.sort(files, new LastModifiedComparitor());
-
-    for (FileStatus f : files)
-    {
-      Schema schema = getNewestSchemaFromSource(f.getPath(), fs);
-      if (schema != null)
-        return schema;
-    }
-    return null;
+    return getNewestSchemaFromSource(job, topic, null);
   }
 
-  private Schema getNewestSchemaFromSource(Path sourceDir, FileSystem fs) throws IOException
+  private Schema getNewestOutputSchemaFromSource(Job job, String topic)
   {
-    FileStatus[] files = fs.listStatus(sourceDir);
-    Arrays.sort(files, new LastModifiedComparitor());
-    for (FileStatus f : files)
-    {
-      if (f.isDir())
-      {
-        Schema schema = getNewestSchemaFromSource(f.getPath(), fs);
-        if (schema != null)
-          return schema;
+    String destinationSchemaFormat = getConfValue(job, topic, "camus.sweeper.destination.schema.format");
+
+    return getNewestSchemaFromSource(job, topic, destinationSchemaFormat);
+  }
+
+
+  private Schema getNewestSchemaFromSource(Job job, String topic, String destinationSchemaFormat) {
+    URI schemaURI;
+    String schemaRegistryHost = getConfValue(job, topic, "camus.sweeper.schema.registry.host");
+
+    try {
+      if (destinationSchemaFormat != null) {
+        schemaURI = new URI(schemaRegistryHost + "/" + topic + "/latest." + destinationSchemaFormat);
+      } else {
+        schemaURI = new URI(schemaRegistryHost + "/" + topic + "/latest");
       }
-      else if (f.getPath().getName().endsWith(".avro"))
-      {
-        FsInput fi = new FsInput(f.getPath(), fs.getConf());
-        GenericDatumReader<GenericRecord> genReader = new GenericDatumReader<GenericRecord>();
-        DataFileReader<GenericRecord> reader = new DataFileReader<GenericRecord>(fi, genReader);
-        return reader.getSchema();
-      }
+      log.info("Fetching latest schema from " + schemaURI);
+      String latestSchemaPayload = IOUtils.toString(schemaURI, "UTF-8");
+      String latestSchema = latestSchemaPayload.split("\t")[1];
+      return new Schema.Parser().parse(latestSchema);
     }
-    return null;
-  }
-
-  class LastModifiedComparitor implements Comparator<FileStatus>
-  {
-
-    @Override
-    public int compare(FileStatus o1, FileStatus o2)
+    catch (java.net.URISyntaxException e)
     {
-      if (o2.getModificationTime() > o1.getModificationTime())
-        return -1;
-      else if (o2.getModificationTime() < o1.getModificationTime())
-        return 1;
-      else
-        return 0;
+      throw new RuntimeException(e);
+    }
+    catch (java.io.IOException e)
+    {
+      throw new RuntimeException(e);
     }
   }
-
 }
