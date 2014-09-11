@@ -9,7 +9,11 @@ import java.util.List;
 
 import java.net.URI;
 
-import org.apache.commons.io.IOUtils;
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpEntity;
+import org.apache.http.util.EntityUtils;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.client.methods.HttpGet;
 
 import org.apache.avro.Schema;
 import org.apache.avro.file.DataFileReader;
@@ -31,108 +35,116 @@ import org.apache.log4j.Logger;
 
 public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
 {
-  @Override
-  public void configureJob(String topic, Job job)
-  {
-    // setting up our input format and map output types
-    super.configureInput(job, AvroKeyCombineFileInputFormat.class, AvroMorphlineKeyMapper.class, AvroKey.class, AvroValue.class);
+    // see http://hc.apache.org/httpclient-3.x/preference-api.html
+    // for more info on timeouts
+    private Integer httpConnectionTimeout = 15000; // in milliseconds
+    private Integer httpSocketTimeout = 0; // infininite
 
-    // setting up our output format and output types
-    super.configureOutput(job, AvroKeyOutputFormat.class, AvroKeyReducer.class, AvroKey.class, NullWritable.class);
-
-    // finding the newest file from our input. this file will contain the newest version of our avro
-    // schema.
-    Schema schema = getNewestInputSchemaFromSource(job, topic);
-
-    // checking if we have a key schema used for deduping. if we don't then we make this a map only
-    // job and set the key schema
-    // to the newest input schema
-    String keySchemaStr = getConfValue(job, topic, "camus.sweeper.avro.key.schema");
-    Schema keySchema;
-    if (keySchemaStr == null || keySchemaStr.isEmpty())
+    @Override
+    public void configureJob(String topic, Job job)
     {
-      job.setNumReduceTasks(0);
-      keySchema = schema;
+        // setting up our input format and map output types
+        super.configureInput(job, AvroKeyCombineFileInputFormat.class, AvroMorphlineKeyMapper.class, AvroKey.class, AvroValue.class);
+
+        // setting up our output format and output types
+        super.configureOutput(job, AvroKeyOutputFormat.class, AvroKeyReducer.class, AvroKey.class, NullWritable.class);
+
+        // finding the newest file from our input. this file will contain the newest version of our avro
+        // schema.
+        Schema schema = getNewestInputSchemaFromSource(job, topic);
+
+        // checking if we have a key schema used for deduping. if we don't then we make this a map only
+        // job and set the key schema
+        // to the newest input schema
+        String keySchemaStr = getConfValue(job, topic, "camus.sweeper.avro.key.schema");
+        Schema keySchema;
+        if (keySchemaStr == null || keySchemaStr.isEmpty()) {
+            job.setNumReduceTasks(0);
+            keySchema = schema;
+        } else {
+            keySchema = new Schema.Parser().parse(keySchemaStr);
+        }
+
+        setupSchemas(topic, job, schema, keySchema);
+
+        try {
+            String schemaRegistryHost = getConfValue(job, topic, "camus.sweeper.schema.registry.host");
+            URI morphlinesURI = new URI(schemaRegistryHost + "/" + topic + "/latest.morphlines");
+            log.info("Fetching latest morphlines from URI " + morphlinesURI);
+            String latestMorphlinePayload = fetchContentFromURI(morphlinesURI);
+            String latestMorphline = latestMorphlinePayload.split("\t")[1];
+            job.getConfiguration().set("camus.sweeper.morphlines.configuration", latestMorphline);
+            job.getConfiguration().set("camus.sweeper.morphlines.topic", topic);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (java.net.URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+
+        // setting the compression level. Only used if compression is enabled. default is 6
+        job.getConfiguration().setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY,
+                                      job.getConfiguration().getInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, 6));
     }
-    else
+
+    private void setupSchemas(String topic, Job job, Schema schema, Schema keySchema)
     {
-      keySchema = new Schema.Parser().parse(keySchemaStr);
+        log.info("Input Schema set to " + schema.toString());
+        AvroJob.setInputKeySchema(job, schema);
+
+        AvroJob.setMapOutputKeySchema(job, keySchema);
+
+        Schema reducerSchema = getNewestOutputSchemaFromSource(job, topic);
+
+        AvroJob.setMapOutputValueSchema(job, reducerSchema);
+        AvroJob.setOutputKeySchema(job, reducerSchema);
+        log.info("Output Schema set to " + reducerSchema.toString());
     }
 
-    setupSchemas(topic, job, schema, keySchema);
-
-    try {
-      String schemaRegistryHost = getConfValue(job, topic, "camus.sweeper.schema.registry.host");
-      URI morphlinesURI = new URI(schemaRegistryHost + "/" + topic + "/latest.morphlines");
-      log.info("Fetching latest morphlines from URI " + morphlinesURI);
-      String latestMorphlinePayload = IOUtils.toString(morphlinesURI, "UTF-8");
-      String latestMorphline = latestMorphlinePayload.split("\t")[1];
-      job.getConfiguration().set("camus.sweeper.morphlines.configuration", latestMorphline);
-      job.getConfiguration().set("camus.sweeper.morphlines.topic", topic);
-    }
-    catch (java.net.URISyntaxException e)
+    private Schema getNewestInputSchemaFromSource(Job job, String topic)
     {
-      throw new RuntimeException(e);
+        return getNewestSchemaFromSource(job, topic, null);
     }
-    catch (java.io.IOException e)
+
+    private Schema getNewestOutputSchemaFromSource(Job job, String topic)
     {
-      throw new RuntimeException(e);
+        String destinationSchemaFormat = getConfValue(job, topic, "camus.sweeper.destination.schema.format");
+
+        return getNewestSchemaFromSource(job, topic, destinationSchemaFormat);
     }
 
-    // setting the compression level. Only used if compression is enabled. default is 6
-    job.getConfiguration().setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY,
-                                  job.getConfiguration().getInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, 6));
-  }
 
-  private void setupSchemas(String topic, Job job, Schema schema, Schema keySchema)
-  {
-    log.info("Input Schema set to " + schema.toString());
-    AvroJob.setInputKeySchema(job, schema);
+    private Schema getNewestSchemaFromSource(Job job, String topic, String destinationSchemaFormat) {
+        URI schemaURI;
+        String schemaRegistryHost = getConfValue(job, topic, "camus.sweeper.schema.registry.host");
 
-    AvroJob.setMapOutputKeySchema(job, keySchema);
-
-    Schema reducerSchema = getNewestOutputSchemaFromSource(job, topic);
-
-    AvroJob.setMapOutputValueSchema(job, reducerSchema);
-    AvroJob.setOutputKeySchema(job, reducerSchema);
-    log.info("Output Schema set to " + reducerSchema.toString());
-  }
-
-  private Schema getNewestInputSchemaFromSource(Job job, String topic)
-  {
-    return getNewestSchemaFromSource(job, topic, null);
-  }
-
-  private Schema getNewestOutputSchemaFromSource(Job job, String topic)
-  {
-    String destinationSchemaFormat = getConfValue(job, topic, "camus.sweeper.destination.schema.format");
-
-    return getNewestSchemaFromSource(job, topic, destinationSchemaFormat);
-  }
-
-
-  private Schema getNewestSchemaFromSource(Job job, String topic, String destinationSchemaFormat) {
-    URI schemaURI;
-    String schemaRegistryHost = getConfValue(job, topic, "camus.sweeper.schema.registry.host");
-
-    try {
-      if (destinationSchemaFormat != null) {
-        schemaURI = new URI(schemaRegistryHost + "/" + topic + "/latest." + destinationSchemaFormat);
-      } else {
-        schemaURI = new URI(schemaRegistryHost + "/" + topic + "/latest");
-      }
-      log.info("Fetching latest schema from " + schemaURI);
-      String latestSchemaPayload = IOUtils.toString(schemaURI, "UTF-8");
-      String latestSchema = latestSchemaPayload.split("\t")[1];
-      return new Schema.Parser().parse(latestSchema);
+        try {
+            if (destinationSchemaFormat != null) {
+                schemaURI = new URI(schemaRegistryHost + "/" + topic + "/latest." + destinationSchemaFormat);
+            } else {
+                schemaURI = new URI(schemaRegistryHost + "/" + topic + "/latest");
+            }
+            log.info("Fetching latest schema from " + schemaURI);
+            String latestSchemaPayload = fetchContentFromURI(schemaURI);
+            String latestSchema = latestSchemaPayload.split("\t")[1];
+            return new Schema.Parser().parse(latestSchema);
+        } catch (java.net.URISyntaxException e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
-    catch (java.net.URISyntaxException e)
-    {
-      throw new RuntimeException(e);
+
+    private String fetchContentFromURI(URI address) throws IOException {
+        DefaultHttpClient httpClient = new DefaultHttpClient();
+
+        httpClient.getParams().setIntParameter("http.connection.timeout",
+                                               httpConnectionTimeout);
+
+        httpClient.getParams().setIntParameter("http.socket.timeout",
+                                               httpSocketTimeout);
+
+        HttpResponse httpResponse = httpClient.execute(new HttpGet(address));
+        HttpEntity responseEntity = httpResponse.getEntity();
+        return EntityUtils.toString(responseEntity, "UTF-8");
     }
-    catch (java.io.IOException e)
-    {
-      throw new RuntimeException(e);
-    }
-  }
 }
