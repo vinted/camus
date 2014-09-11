@@ -3,6 +3,7 @@ package com.linkedin.camus.etl.kafka.mapred;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -53,7 +54,10 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
         super(outputPath, context);
         this.context = context;
         try {
-            recordWriterProvider = EtlMultiOutputFormat.getRecordWriterProviderClass(context).newInstance();
+            //recordWriterProvider = EtlMultiOutputFormat.getRecordWriterProviderClass(context).newInstance();
+            Class<RecordWriterProvider> rwp = EtlMultiOutputFormat.getRecordWriterProviderClass(context);
+            Constructor<RecordWriterProvider> crwp = rwp.getConstructor(TaskAttemptContext.class);
+            recordWriterProvider = crwp.newInstance(context);
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
@@ -68,9 +72,12 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
         FileSystem fs = FileSystem.get(context.getConfiguration());
         if (EtlMultiOutputFormat.isRunMoveData(context)) {
             Path workPath = super.getWorkPath();
+            log.info("work path: " + workPath);
             Path baseOutDir = EtlMultiOutputFormat.getDestinationPath(context);
+            log.info("Destination base path: " + baseOutDir);
             for (FileStatus f : fs.listStatus(workPath)) {
                 String file = f.getPath().getName();
+                log.info("work file: " + file);
                 if (file.startsWith("data")) {
                     String workingFileName = file.substring(0, file.lastIndexOf("-m"));
                     EtlCounts count = counts.get(workingFileName);
@@ -85,6 +92,7 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
                         }
 
                     commitFile(context, f.getPath(), dest);
+                    log.info("Moved file from: " + f.getPath() + " to: " + dest);
 
                     if (EtlMultiOutputFormat.isRunTrackingPost(context)) {
                             count.writeCountsToMap(allCountObject, fs, new Path(workPath, EtlMultiOutputFormat.COUNTS_PREFIX + "."
@@ -102,6 +110,9 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
               mapper.writeValue(outputStream, allCountObject);
               log.debug("Time taken : " + (System.currentTimeMillis() - time)/1000);
             }
+        }
+        else {
+          log.info("Not moving run data.");
         }
 
         SequenceFile.Writer offsetWriter = SequenceFile.createWriter(fs,
