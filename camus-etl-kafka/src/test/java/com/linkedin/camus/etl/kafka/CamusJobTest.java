@@ -137,8 +137,6 @@ public class CamusJobTest {
         assertCamusContains(TOPIC_3);
     }
 
-<<<<<<< HEAD
-=======
     @Test
     public void runJobWithErrors() throws Exception {
         props.setProperty(EtlInputFormat.CAMUS_MESSAGE_DECODER_CLASS, FailDecoder.class.getName());
@@ -165,7 +163,6 @@ public class CamusJobTest {
         job.run();
     }
 
->>>>>>> upstream/master
     private void assertCamusContains(String topic) throws InstantiationException, IllegalAccessException, IOException {
         assertCamusContains(topic, messagesWritten.get(topic));
     }
