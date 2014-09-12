@@ -37,8 +37,10 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
 {
     // see http://hc.apache.org/httpclient-3.x/preference-api.html
     // for more info on timeouts
-    private Integer httpConnectionTimeout = 15000; // in milliseconds
-    private Integer httpSocketTimeout = 0; // infininite
+    private Integer httpConnectionTimeout;
+    private Integer httpSocketTimeout;
+    private Integer defaultHttpConnectionTimeout = 30000; // in milliseconds
+    private Integer defaultHttpSocketTimeout = 0; // infininite
 
     @Override
     public void configureJob(String topic, Job job)
@@ -52,6 +54,10 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
         // finding the newest file from our input. this file will contain the newest version of our avro
         // schema.
         Schema schema = getNewestInputSchemaFromSource(job, topic);
+
+        // set http connection timeouts
+        httpConnectionTimeout = Integer.parseInt(getConfValue(job, topic, "camus.sweeper.schema.registry.http.connection.timeout", defaultHttpConnectionTimeout.toString()));
+        httpSocketTimeout = Integer.parseInt(getConfValue(job, topic, "camus.sweeper.schema.registry.http.connection.socket.timeout", defaultHttpSocketTimeout.toString()));
 
         // checking if we have a key schema used for deduping. if we don't then we make this a map only
         // job and set the key schema
