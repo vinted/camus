@@ -51,13 +51,16 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
         // setting up our output format and output types
         super.configureOutput(job, AvroKeyOutputFormat.class, AvroKeyReducer.class, AvroKey.class, NullWritable.class);
 
-        // finding the newest file from our input. this file will contain the newest version of our avro
-        // schema.
-        Schema schema = getNewestInputSchemaFromSource(job, topic);
-
         // set http connection timeouts
         httpConnectionTimeout = Integer.parseInt(getConfValue(job, topic, "camus.sweeper.schema.registry.http.connection.timeout", defaultHttpConnectionTimeout.toString()));
         httpSocketTimeout = Integer.parseInt(getConfValue(job, topic, "camus.sweeper.schema.registry.http.connection.socket.timeout", defaultHttpSocketTimeout.toString()));
+
+        log.info("Schema registry HTTP Connection timeout set to: " + httpConnectionTimeout);
+        log.info("Schema registry HTTP Connection socket timeout set to: " + httpSocketTimeout);
+
+        // finding the newest file from our input. this file will contain the newest version of our avro
+        // schema.
+        Schema schema = getNewestInputSchemaFromSource(job, topic);
 
         // checking if we have a key schema used for deduping. if we don't then we make this a map only
         // job and set the key schema
