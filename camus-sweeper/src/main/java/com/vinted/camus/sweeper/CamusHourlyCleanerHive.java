@@ -72,7 +72,7 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
     }
 
     private String getCountry() {
-        if (country != "null") {
+        if (country != null) {
             return country;
         } else {
             throw new RuntimeException("CamusHourlyCleanerHive expects property camus.sweeper.clean.country to be set");
@@ -199,6 +199,7 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
         dUtils = new DateUtils(props);
         outputDailyFormat = dUtils.getDateTimeFormatter("YYYY/MM/dd");
         outputMonthFormat = dUtils.getDateTimeFormatter("YYYY/MM");
+        country = props.getProperty("camus.sweeper.clean.country");
 
         run();
         return 0;
