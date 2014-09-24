@@ -152,8 +152,11 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
         httpClient.getParams().setIntParameter("http.socket.timeout",
                                                httpSocketTimeout);
 
-        HttpResponse httpResponse = httpClient.execute(new HttpGet(address));
+        HttpGet requestMethod = new HttpGet(address);
+        HttpResponse httpResponse = httpClient.execute(requestMethod);
         HttpEntity responseEntity = httpResponse.getEntity();
-        return EntityUtils.toString(responseEntity, "UTF-8");
+        String response = EntityUtils.toString(responseEntity, "UTF-8");
+        requestMethod.releaseConnection();
+        return response;
     }
 }
