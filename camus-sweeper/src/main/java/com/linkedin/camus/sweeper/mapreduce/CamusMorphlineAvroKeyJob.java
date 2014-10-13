@@ -25,12 +25,14 @@ import org.apache.avro.mapred.AvroValue;
 import org.apache.avro.mapred.FsInput;
 import org.apache.avro.mapreduce.AvroJob;
 import org.apache.avro.mapreduce.AvroKeyOutputFormat;
+import org.apache.avro.mapreduce.AvroMultipleOutputs;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.LazyOutputFormat;
 import org.apache.log4j.Logger;
 
 public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
@@ -49,7 +51,12 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
         super.configureInput(job, AvroKeyCombineFileInputFormat.class, AvroMorphlineKeyMapper.class, AvroKey.class, AvroValue.class);
 
         // setting up our output format and output types
-        super.configureOutput(job, AvroKeyOutputFormat.class, AvroKeyReducer.class, AvroKey.class, NullWritable.class);
+        super.configureOutput(job, AvroKeyOutputFormat.class, AvroKeyPortalReducer.class, AvroKey.class, NullWritable.class);
+
+        // if all output gets sent to NamedOutputs don't leave the empty part-00000 file
+        // in the root of output directory
+        // more info http://hadoop.apache.org/docs/r2.3.0/api/org/apache/hadoop/mapreduce/lib/output/MultipleOutputs.html
+        LazyOutputFormat.setOutputFormatClass(job, AvroKeyOutputFormat.class);
 
         // set http connection timeouts
         httpConnectionTimeout = Integer.parseInt(getConfValue(job, topic, "camus.sweeper.schema.registry.http.connection.timeout", defaultHttpConnectionTimeout.toString()));
@@ -95,8 +102,7 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
                                       job.getConfiguration().getInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, 6));
     }
 
-    private void setupSchemas(String topic, Job job, Schema schema, Schema keySchema)
-    {
+    private void setupSchemas(String topic, Job job, Schema schema, Schema keySchema) {
         log.info("Input Schema set to " + schema.toString());
         AvroJob.setInputKeySchema(job, schema);
 
@@ -104,9 +110,22 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
 
         Schema reducerSchema = getNewestOutputSchemaFromSource(job, topic);
 
+        setupNamedOutputs(topic, job, schema, reducerSchema);
+
         AvroJob.setMapOutputValueSchema(job, reducerSchema);
         AvroJob.setOutputKeySchema(job, reducerSchema);
         log.info("Output Schema set to " + reducerSchema.toString());
+    }
+
+    private void setupNamedOutputs(String topic, Job job, Schema schema, Schema reducerSchema) {
+        // Named outputs can contain only alpha numeric chars
+        String portalList = getConfValue(job, topic, "camus.sweeper.portals").replaceAll("[^A-Za-z0-9,]", "");
+        String[] portals = portalList.split(",");
+
+        for (String portal : portals) {
+            AvroMultipleOutputs.addNamedOutput(job, portal, AvroKeyOutputFormat.class, reducerSchema);
+            log.info("Adding named output for potal: " + portal);
+        }
     }
 
     private Schema getNewestInputSchemaFromSource(Job job, String topic)
