@@ -67,7 +67,11 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
 
         // finding the newest file from our input. this file will contain the newest version of our avro
         // schema.
-        Schema schema = getNewestInputSchemaFromSource(job, topic);
+        Schema inputSchema = getOverridenTopicSchema(job, topic);
+
+        if (inputSchema == null) {
+            inputSchema = getNewestInputSchemaFromSource(job, topic);
+        }
 
         // checking if we have a key schema used for deduping. if we don't then we make this a map only
         // job and set the key schema
@@ -76,12 +80,12 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
         Schema keySchema;
         if (keySchemaStr == null || keySchemaStr.isEmpty()) {
             job.setNumReduceTasks(0);
-            keySchema = schema;
+            keySchema = inputSchema;
         } else {
             keySchema = new Schema.Parser().parse(keySchemaStr);
         }
 
-        setupSchemas(topic, job, schema, keySchema);
+        setupSchemas(topic, job, inputSchema, keySchema);
 
         try {
             String schemaRegistryHost = getConfValue(job, topic, "camus.sweeper.schema.registry.host");
@@ -140,6 +144,15 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
         return getNewestSchemaFromSource(job, topic, destinationSchemaFormat);
     }
 
+    private Schema getOverridenTopicSchema(Job job, String topic) {
+        String inputSchema = getConfValue(job, topic, "camus.input.schema", null);
+
+        if (inputSchema != null) {
+            return new Schema.Parser().parse(inputSchema);
+        } else {
+            return null;
+        }
+    }
 
     private Schema getNewestSchemaFromSource(Job job, String topic, String destinationSchemaFormat) {
         URI schemaURI;
