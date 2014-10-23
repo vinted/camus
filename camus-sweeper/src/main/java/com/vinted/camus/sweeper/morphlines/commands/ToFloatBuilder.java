@@ -1,4 +1,4 @@
-package org.kitesdk.morphline.stdlib;
+package com.vinted.camus.sweeper.morphlines.commands;
 
 import java.util.Collection;
 import java.util.Collections;
