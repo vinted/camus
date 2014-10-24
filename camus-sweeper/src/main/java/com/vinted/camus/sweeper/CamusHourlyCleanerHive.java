@@ -34,8 +34,10 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
 
     private Properties props;
     private DateUtils dUtils;
-    private DateTimeFormatter outputDailyFormat;
-    private DateTimeFormatter outputMonthFormat;
+    private DateTimeFormatter srcutputDailyFormat;
+    private DateTimeFormatter srcOutputMonthFormat;
+    private DateTimeFormatter destOutputDailyFormat;
+    private DateTimeFormatter destOutputMonthFormat;
     private String country;
 
     private FileSystem sourceFS;
@@ -62,8 +64,8 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
         this.props = props;
         this.country = props.getProperty("camus.sweeper.clean.country");
         this.dUtils = new DateUtils(props);
-        this.outputDailyFormat = dUtils.getDateTimeFormatter("YYYY/MM/dd");
-        this.outputMonthFormat = dUtils.getDateTimeFormatter("YYYY/MM");
+        this.srcOutputDailyFormat = dUtils.getDateTimeFormatter("YYYY/MM/dd");
+        this.srcOutputMonthFormat = dUtils.getDateTimeFormatter("YYYY/MM");
     }
 
     public static void main(String args[]) throws Exception {
@@ -101,8 +103,11 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
         simulate = Boolean.parseBoolean(props.getProperty(SIMULATE, defaultSimulate.toString()));
         forceDelete = Boolean.parseBoolean(props.getProperty(KAFKA_FORCE_DELETE, defaultForceDelete.toString()));
 
-        outputDailyFormat = dUtils.getDateTimeFormatter("'country=" + getCountry() + "/year='YYYY/'month='MM/'day'=dd");
-        outputMonthFormat = dUtils.getDateTimeFormatter("'country=" + getCountry() + "/year='YYYY/'month='MM");
+        destOutputDailyFormat = dUtils.getDateTimeFormatter("'year='YYYY/'month='MM/'day'=dd");
+        destOutputMonthFormat = dUtils.getDateTimeFormatter("'year='YYYY/'month='MM");
+
+        srcOutputDailyFormat = dUtils.getDateTimeFormatter("YYYY/MM/dd");
+        srcOutputMonthFormat = dUtils.getDateTimeFormatter("YYYY/MM");
 
         for (FileStatus status : sourceFS.listStatus(sourcePath)) {
             String name = status.getPath().getName();
@@ -124,9 +129,10 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
         int currentMonth = currentTime.getMonthOfYear();
 
         while (currentTime.isBefore(daysAgo)) {
-            String dateString = outputDailyFormat.print(currentTime);
-            Path sourceHourlyDate = new Path(sourcePath, topic + "/hourly/" + dateString);
-            Path sourceDailyDate = new Path(sourcePath, topic + "/daily/" + dateString);
+            String srcDateString = srcOutputDailyFormat.print(currentTime);
+            String destDateString = destOutputDailyFormat.print(currentTime);
+            Path sourceHourlyDate = new Path(sourcePath, topic + "/hourly/" + srcDateString);
+            Path sourceDailyDate = new Path(sourcePath, topic + "/daily/" + destDateString);
             log.info(sourceHourlyDate);
 
             if (sourceFS.exists(sourceHourlyDate)) {
@@ -146,7 +152,7 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
             DateTime newTime = currentTime.plusDays(1);
             if (newTime.getMonthOfYear() != currentMonth) {
                 log.info("Checking month to see if we need to clean up");
-                Path monthPath = new Path(sourcePath, topic + "/hourly/" + outputMonthFormat.print(currentTime));
+                Path monthPath = new Path(sourcePath, topic + "/hourly/" + srcOutputMonthFormat.print(currentTime));
 
                 if (sourceFS.exists(monthPath)) {
                     FileStatus[] status = sourceFS.listStatus(monthPath);
@@ -197,9 +203,8 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
         props.putAll(cmd.getOptionProperties("D"));
 
         dUtils = new DateUtils(props);
-        outputDailyFormat = dUtils.getDateTimeFormatter("YYYY/MM/dd");
-        outputMonthFormat = dUtils.getDateTimeFormatter("YYYY/MM");
-        country = props.getProperty("camus.sweeper.clean.country");
+        srcOutputDailyFormat = dUtils.getDateTimeFormatter("YYYY/MM/dd");
+        srcOutputMonthFormat = dUtils.getDateTimeFormatter("YYYY/MM");
 
         run();
         return 0;
