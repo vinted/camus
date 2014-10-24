@@ -34,7 +34,7 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
 
     private Properties props;
     private DateUtils dUtils;
-    private DateTimeFormatter srcutputDailyFormat;
+    private DateTimeFormatter srcOutputDailyFormat;
     private DateTimeFormatter srcOutputMonthFormat;
     private DateTimeFormatter destOutputDailyFormat;
     private DateTimeFormatter destOutputMonthFormat;
