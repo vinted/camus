@@ -54,6 +54,9 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
     private Boolean forceDelete;
     private Boolean defaultForceDelete = false;
 
+    private String hourlySubdir;
+    private String dailySubdir;
+
     private static Logger log = Logger.getLogger(CamusHourlyCleanerHive.class);
 
     public CamusHourlyCleanerHive() {
@@ -90,6 +93,9 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
 
         String fromLocation = (String) props.getProperty("camus.sweeper.source.dir");
         String destLocation = (String) props.getProperty("camus.sweeper.dest.dir", "");
+
+        hourlySubdir = (String) props.getProperty("camus.sweeper.hourly.subdir", "hourly");
+        dailySubdir = (String) props.getProperty("camus.sweeper.daily.subdir", "daily");
 
         if (destLocation.isEmpty()) {
             destLocation = fromLocation;
@@ -131,8 +137,8 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
         while (currentTime.isBefore(daysAgo)) {
             String srcDateString = srcOutputDailyFormat.print(currentTime);
             String destDateString = destOutputDailyFormat.print(currentTime);
-            Path sourceHourlyDate = new Path(sourcePath, topic + "/hourly/" + srcDateString);
-            Path sourceDailyDate = new Path(sourcePath, topic + "/daily/" + destDateString);
+            Path sourceHourlyDate = new Path(sourcePath, topic + "/" + hourlySubdir + "/" + srcDateString);
+            Path sourceDailyDate = new Path(sourcePath, topic + "/" + dailySubdir + "/" + destDateString);
             log.info(sourceHourlyDate);
 
             if (sourceFS.exists(sourceHourlyDate)) {
@@ -152,7 +158,7 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
             DateTime newTime = currentTime.plusDays(1);
             if (newTime.getMonthOfYear() != currentMonth) {
                 log.info("Checking month to see if we need to clean up");
-                Path monthPath = new Path(sourcePath, topic + "/hourly/" + srcOutputMonthFormat.print(currentTime));
+                Path monthPath = new Path(sourcePath, topic + "/" + hourlySubdir + "/" + srcOutputMonthFormat.print(currentTime));
 
                 if (sourceFS.exists(monthPath)) {
                     FileStatus[] status = sourceFS.listStatus(monthPath);
