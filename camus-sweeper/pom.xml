@@ -28,18 +28,18 @@
             <version>2.2</version>
         </dependency>
 
-        <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro-mapred</artifactId>
-            <version>1.7.4</version>
+		    <dependency>
+			      <groupId>org.apache.avro</groupId>
+			      <artifactId>avro-mapred</artifactId>
+			      <version>1.7.7</version>
             <classifier>hadoop2</classifier>
-        </dependency>
+		    </dependency>
 
-        <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
-            <version>1.7.4</version>
-        </dependency>
+		    <dependency>
+			      <groupId>org.apache.avro</groupId>
+			      <artifactId>avro</artifactId>
+			      <version>1.7.7</version>
+		    </dependency>
 
         <dependency>
             <groupId>log4j</groupId>
