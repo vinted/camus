@@ -52,8 +52,8 @@ public class DefaultPartitioner extends Partitioner {
     public String getWorkingFileName(JobContext context, String topic, String brokerId, int partitionId,
         String encodedPartition) {
       StringBuilder sb = new StringBuilder();
-      sb.append("data.").append(topic.replaceAll("\\.", "_"));
-      sb.append(".").append(brokerId);
+      sb.append("data.").append(topic);
+      sb.append("_._").append(brokerId);
       sb.append(".").append(partitionId);
       sb.append(".").append(encodedPartition);
       
