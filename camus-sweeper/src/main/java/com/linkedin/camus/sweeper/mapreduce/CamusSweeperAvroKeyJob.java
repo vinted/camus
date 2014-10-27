@@ -8,7 +8,13 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.apache.avro.Schema;
+import org.apache.avro.Schema.Field;
+import org.apache.avro.Schema.Type;
+import org.apache.avro.SchemaCompatibility;
+import org.apache.avro.SchemaCompatibility.SchemaCompatibilityType;
 import org.apache.avro.SchemaParseException;
+import org.apache.avro.SchemaValidationException;
+import org.apache.avro.SchemaValidatorBuilder;
 import org.apache.avro.file.DataFileReader;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericRecord;
@@ -71,8 +77,9 @@ public class CamusSweeperAvroKeyJob extends CamusSweeperJob
     // job and set the key schema
     // to the newest input schema
     String keySchemaStr = getConfValue(job, topic, "camus.sweeper.avro.key.schema");
+    
     Schema keySchema;
-    if (keySchemaStr == null || keySchemaStr.isEmpty())
+    if (keySchemaStr == null || keySchemaStr.isEmpty() || job.getConfiguration().getBoolean("second.stage", false))
     {
       job.setNumReduceTasks(0);
       keySchema = schema;
@@ -80,6 +87,18 @@ public class CamusSweeperAvroKeyJob extends CamusSweeperJob
     else
     {
       keySchema = RelaxedSchemaUtils.parseSchema(keySchemaStr, job.getConfiguration());
+      
+      keySchema = duplicateRecord(keySchema, schema);
+      log.info("key schema:" + keySchema);
+      
+      if (! validateKeySchema(schema, keySchema))
+      {
+        log.info("topic:" + topic + " key invalid, using map only job");
+        job.setNumReduceTasks(0);
+        keySchema = schema;
+      } else {
+        log.info("topic:" + topic + " key is valid, deduping");
+      }
     }
 
     setupSchemas(topic, job, schema, keySchema);
@@ -88,10 +107,36 @@ public class CamusSweeperAvroKeyJob extends CamusSweeperJob
     job.getConfiguration().setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY,
                                   job.getConfiguration().getInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, 6));
   }
+  
+  private boolean validateKeySchema(Schema schema, Schema keySchema)
+  {
+     return SchemaCompatibility.checkReaderWriterCompatibility(keySchema, schema).getType().equals(SchemaCompatibilityType.COMPATIBLE);
+  }
+  
+  public Schema duplicateRecord(Schema record, Schema original){
+    List<Field> fields = new ArrayList<Schema.Field>();
+    
+    for (Field f : record.getFields()){
+      Schema fldSchema;
+      if (original.getField(f.name()) != null){
+        fldSchema = original.getField(f.name()).schema();
+      } else {
+        fldSchema = f.schema();
+      }
+      
+      fields.add(new Field(f.name(), fldSchema, f.doc(), f.defaultValue(), f.order()));
+    }
+    
+    Schema newRecord = Schema.createRecord(original.getName(), record.getDoc(), original.getNamespace(), false);
+    newRecord.setFields(fields);
+    
+    return newRecord;
+  }
 
   private void setupSchemas(String topic, Job job, Schema schema, Schema keySchema)
   {
     log.info("Input Schema set to " + schema.toString());
+    log.info("Key Schema set to " + keySchema.toString());
     AvroJob.setInputKeySchema(job, schema);
 
     AvroJob.setMapOutputKeySchema(job, keySchema);
@@ -116,7 +161,7 @@ public class CamusSweeperAvroKeyJob extends CamusSweeperJob
       files.addAll(Arrays.asList(fs.listStatus(sourceDir)));
     }
 
-    Collections.sort(files, new LastModifiedComparitor());
+    Collections.sort(files, new ReverseLastModifiedComparitor());
 
     for (FileStatus f : files)
     {
@@ -130,7 +175,7 @@ public class CamusSweeperAvroKeyJob extends CamusSweeperJob
   private Schema getNewestSchemaFromSource(Path sourceDir, FileSystem fs) throws IOException
   {
     FileStatus[] files = fs.listStatus(sourceDir);
-    Arrays.sort(files, new LastModifiedComparitor());
+    Arrays.sort(files, new ReverseLastModifiedComparitor());
     for (FileStatus f : files)
     {
       if (f.isDir())
@@ -150,15 +195,15 @@ public class CamusSweeperAvroKeyJob extends CamusSweeperJob
     return null;
   }
 
-  class LastModifiedComparitor implements Comparator<FileStatus>
+  class ReverseLastModifiedComparitor implements Comparator<FileStatus>
   {
 
     @Override
     public int compare(FileStatus o1, FileStatus o2)
     {
-      if (o2.getModificationTime() > o1.getModificationTime())
+      if (o2.getModificationTime() < o1.getModificationTime())
         return -1;
-      else if (o2.getModificationTime() < o1.getModificationTime())
+      else if (o2.getModificationTime() > o1.getModificationTime())
         return 1;
       else
         return 0;
