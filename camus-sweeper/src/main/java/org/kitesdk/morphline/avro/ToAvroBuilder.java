@@ -145,6 +145,17 @@ public final class ToAvroBuilder implements CommandBuilder {
           avroResult = AvroConversions.toAvro(list, field);
         } else if (field.schema().getType() == Schema.Type.UNION && list.size() == 1 && arrayUnion(field.schema())) {
           avroResult = AvroConversions.toAvro(list, field);
+        } else if (field.schema().getType() == Schema.Type.MAP && list.size() == 0) {
+          String fieldName = field.name();
+          Map<String, Object> mapEntries = new HashMap<String, Object>();
+
+          for (String path : inputRecord.getFields().keySet()) {
+            if (path.startsWith(fieldName)) {
+              mapEntries.put(path.replaceFirst(fieldName + "_", ""), inputRecord.getFirstValue(path));
+            }
+          }
+
+          avroResult = AvroConversions.toAvro(mapEntries, field);
         } else if (list.size() == 0) {
           try { // this will fail if there is no default value
             avroResult = ReflectData.get().getDefaultValue(field);
