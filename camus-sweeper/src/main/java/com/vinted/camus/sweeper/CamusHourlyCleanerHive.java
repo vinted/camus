@@ -43,6 +43,7 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
     private FileSystem sourceFS;
 
     private Path sourcePath;
+    private Path destPath;
 
     private Integer numDays;
     private Integer lookbackDays;
@@ -92,16 +93,13 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
         sourceFS = FileSystem.get(srcConf);
 
         String fromLocation = (String) props.getProperty("camus.sweeper.source.dir");
-        String destLocation = (String) props.getProperty("camus.sweeper.dest.dir", "");
+        String destLocation = (String) props.getProperty("camus.sweeper.dest.dir", fromLocation);
 
         hourlySubdir = (String) props.getProperty("camus.sweeper.hourly.subdir", "hourly");
         dailySubdir = (String) props.getProperty("camus.sweeper.daily.subdir", "daily");
 
-        if (destLocation.isEmpty()) {
-            destLocation = fromLocation;
-        }
-
-        sourcePath = new Path(destLocation);
+        sourcePath = new Path(fromLocation);
+        destPath = new Path(destLocation);
 
         numDays = Integer.parseInt((String) props.getProperty("camus.sweeper.clean.retention.hourly.num.days", defaultNumDays.toString()));
         lookbackDays = Integer.parseInt((String) props.getProperty("camus.sweeper.clean.hourly.lookback.days", defaultLookbackDays.toString()));
@@ -138,27 +136,28 @@ public class CamusHourlyCleanerHive extends Configured implements Tool {
             String srcDateString = srcOutputDailyFormat.print(currentTime);
             String destDateString = destOutputDailyFormat.print(currentTime);
             Path sourceHourlyDate = new Path(sourcePath, topic + "/" + hourlySubdir + "/" + srcDateString);
-            Path sourceDailyDate = new Path(sourcePath, topic + "/" + dailySubdir + "/" + destDateString);
-            log.info(sourceHourlyDate);
+            Path destDailyDate = new Path(destPath, topic + "/" + dailySubdir + "/" + destDateString);
 
             if (sourceFS.exists(sourceHourlyDate)) {
-                log.info("Hourly data exists for " + sourceHourlyDate.toString());
-                if (sourceFS.exists(sourceDailyDate) || forceDelete) {
-                    log.info("Deleting " + sourceHourlyDate);
+                log.info("Hourly data exists at " + sourceHourlyDate.toString());
+
+                if (sourceFS.exists(destDailyDate) || forceDelete) {
+                    log.info("Daily data exists at " + destDailyDate.toString());
                     // We should be sure that if this source is deleted that the destinations were also
                     // cleared out too.
+                    log.info("Deleting hourly data at " + sourceHourlyDate);
                     if (!simulate && !sourceFS.delete(sourceHourlyDate, true)) {
                         throw new IOException("Error deleting " + sourceHourlyDate + " on " + sourceFS.getUri());
                     }
                 } else {
-                    throw new IOException("Daily data for " + sourceHourlyDate + " doesn't exist!");
+                    throw new IOException("Daily data for " + sourceHourlyDate + " doesn't exist at " + destDailyDate);
                 }
             }
 
             DateTime newTime = currentTime.plusDays(1);
             if (newTime.getMonthOfYear() != currentMonth) {
-                log.info("Checking month to see if we need to clean up");
                 Path monthPath = new Path(sourcePath, topic + "/" + hourlySubdir + "/" + srcOutputMonthFormat.print(currentTime));
+                log.info("Checking month to see if we need to clean up at " + monthPath);
 
                 if (sourceFS.exists(monthPath)) {
                     FileStatus[] status = sourceFS.listStatus(monthPath);
