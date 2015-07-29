@@ -56,14 +56,14 @@ public class CamusSweeper extends Configured implements Tool
   private Properties props;
   private ExecutorService executorService;
   private FsPermission perm = new FsPermission(FsAction.ALL, FsAction.READ_EXECUTE, FsAction.READ_EXECUTE);
-  
+
   private String destSubdir;
   private String sourceSubdir;
-  
+
   private static Logger log = Logger.getLogger(CamusSweeper.class);
-  
+
   private CamusSweeperPlanner planner;
-  
+
   private Map<String, Integer> priorityTopics = new HashMap<String, Integer>();
 
 
@@ -84,10 +84,10 @@ public class CamusSweeper extends Configured implements Tool
       String[] tokens = str.split("=");
       String topic = tokens[0];
       int priority = tokens.length > 1 ? Integer.parseInt(tokens[1]) : 1;
-      
+
       priorityTopics.put(topic, priority);
     }
-    
+
     this.errorMessages = Collections.synchronizedList(new ArrayList<SweeperError>());
     DateTimeZone.setDefault(DateTimeZone.forID(props.getProperty("default.timezone")));
     this.runningJobs = Collections.synchronizedList(new ArrayList<Job>());
@@ -102,7 +102,7 @@ public class CamusSweeper extends Configured implements Tool
     {
       throw new RuntimeException(e);
     }
-    
+
   }
 
   // TODO:
@@ -129,7 +129,7 @@ public class CamusSweeper extends Configured implements Tool
       }
     }
   }
-  
+
   private Map<FileStatus, String> findAllTopics(Path input, PathFilter filter, String topicSubdir, FileSystem fs) throws IOException{
     Map<FileStatus, String> topics = new HashMap<FileStatus, String>();
     for (FileStatus f : fs.listStatus(input)){
@@ -138,7 +138,7 @@ public class CamusSweeper extends Configured implements Tool
     }
     return topics;
   }
-  
+
   private void findAllTopics(Path input, PathFilter filter, String topicSubdir, String topicNameSpace, FileSystem fs, Map<FileStatus, String> topics) throws IOException{
     for (FileStatus f : fs.listStatus(input)){
       if (! f.isDir())
@@ -156,20 +156,20 @@ public class CamusSweeper extends Configured implements Tool
     log.info("Starting kafka sweeper");
     int numThreads = Integer.parseInt(props.getProperty("num.threads", DEFAULT_NUM_THREADS));
 
-    executorService = executorService = new PriorityExecutor(numThreads); 
+    executorService = executorService = new PriorityExecutor(numThreads);
 
     String fromLocation = (String) props.getProperty("camus.sweeper.source.dir");
     String destLocation = (String) props.getProperty("camus.sweeper.dest.dir", "");
     String tmpLocation = (String) props.getProperty("camus.sweeper.tmp.dir", "");
-    
+
     if (destLocation.isEmpty())
       destLocation = fromLocation;
-    
+
     if (tmpLocation.isEmpty())
       tmpLocation = "/tmp/camus-sweeper-tmp";
     else
       tmpLocation += "/camus-sweeper-tmp";
-    
+
     props.setProperty("camus.sweeper.tmp.dir", tmpLocation);
 
     log.info("fromLocation: " + fromLocation);
@@ -186,12 +186,23 @@ public class CamusSweeper extends Configured implements Tool
     }
 
     FileSystem fs = FileSystem.get(conf);
-    
+
     Path tmpPath = new Path(tmpLocation);
-    fs.mkdirs(tmpPath, perm);
-    String user = UserGroupInformation.getCurrentUser().getUserName();
-    fs.setOwner(tmpPath, user, user);
-    
+
+    if (!fs.exists(tmpPath)) {
+      fs.mkdirs(tmpPath, perm);
+      log.info("Created tmpPath " + tmpPath + " with permissions " + perm + " and umask " + getUmask(conf));
+
+      if (!fs.getFileStatus(tmpPath).getPermission().equals(perm)) {
+        log.error(String.format("Wrong permission for %s. Expects %s, actual %s", tmpPath, perm, fs
+            .getFileStatus(tmpPath).getPermission()));
+        fs.setPermission(tmpPath, perm);
+      }
+
+      String user = UserGroupInformation.getCurrentUser().getUserName();
+      fs.setOwner(tmpPath, user, user);
+    }
+
     Map<FileStatus, String> topics = findAllTopics(new Path(fromLocation), new WhiteBlackListPathFilter(whitelist, blacklist), sourceSubdir, fs);
     for (FileStatus topic : topics.keySet())
     {
@@ -210,14 +221,14 @@ public class CamusSweeper extends Configured implements Tool
         e.printStackTrace();
       }
     }
-    
+
     log.info("Shutting down priority executor");
     executorService.shutdown();
     while (!executorService.isTerminated())
     {
       executorService.awaitTermination(30, TimeUnit.SECONDS);
     }
-    
+
     log.info("Shutting down");
 
     if (!errorMessages.isEmpty())
@@ -232,13 +243,35 @@ public class CamusSweeper extends Configured implements Tool
     }
   }
 
+      private static String getUmask(Configuration conf) {
+    if (conf.get(FsPermission.UMASK_LABEL) != null && conf.get(FsPermission.DEPRECATED_UMASK_LABEL) != null) {
+      log.warn(String.format("Both umask labels exist: %s=%s, %s=%s", FsPermission.UMASK_LABEL,
+          conf.get(FsPermission.UMASK_LABEL), FsPermission.DEPRECATED_UMASK_LABEL,
+          conf.get(FsPermission.DEPRECATED_UMASK_LABEL)));
+      return conf.get(FsPermission.UMASK_LABEL);
+
+    } else if (conf.get(FsPermission.UMASK_LABEL) != null) {
+      log.info(String.format("umask set: %s=%s", FsPermission.UMASK_LABEL, conf.get(FsPermission.UMASK_LABEL)));
+      return conf.get(FsPermission.UMASK_LABEL);
+
+    } else if (conf.get(FsPermission.DEPRECATED_UMASK_LABEL) != null) {
+      log.info(String.format("umask set: %s=%s", FsPermission.DEPRECATED_UMASK_LABEL,
+          conf.get(FsPermission.DEPRECATED_UMASK_LABEL)));
+      return conf.get(FsPermission.DEPRECATED_UMASK_LABEL);
+
+    } else {
+      log.info("umask unset");
+      return "undefined";
+    }
+  }
+
   private void runCollectorForTopicDir(FileSystem fs, String topic, Path topicSourceDir, Path topicDestDir) throws Exception
   {
     log.info("Running collector for topic " + topic + " source:" + topicSourceDir + " dest:" + topicDestDir);
     ArrayList<Future<?>> tasksToComplete = new ArrayList<Future<?>>();
-    
+
     List<Properties> jobPropsList = planner.createSweeperJobProps(topic, topicSourceDir, topicDestDir, fs);
-    
+
     for (Properties jobProps : jobPropsList){
       tasksToComplete.add(runCollector(jobProps, topic));
     }
@@ -256,7 +289,7 @@ public class CamusSweeper extends Configured implements Tool
       props.put("reducer.count", Integer.parseInt(props.getProperty("reduce.count.override." + topic)));
 
     log.info("Processing " + props.get("input.paths"));
-    
+
     return executorService.submit(new KafkaCollectorRunner(jobName, props, errorMessages, topic));
   }
 
@@ -274,7 +307,7 @@ public class CamusSweeper extends Configured implements Tool
       this.props = props;
       this.errorQueue = errorQueue;
       this.topic = topic;
-      
+
       priority = priorityTopics.containsKey(topic) ? priorityTopics.get(topic) : 0;
     }
 
@@ -291,8 +324,8 @@ public class CamusSweeper extends Configured implements Tool
       catch (Throwable e) // Sometimes the error is the Throwable, e.g. java.lang.NoClassDefFoundError
       {
         e.printStackTrace();
-        log.error("Failed for " + name 
-                  + " ,job: " + collector == null ? null : collector.getJob() 
+        log.error("Failed for " + name
+                  + " ,job: " + collector == null ? null : collector.getJob()
                   + " failed for " + props.getProperty("input.paths") + " Exception:"
                   + e.getLocalizedMessage());
         errorQueue.add(new SweeperError(name, props.get("input.paths").toString(), e));
@@ -313,7 +346,7 @@ public class CamusSweeper extends Configured implements Tool
     private final String jobName;
     private final Properties props;
     private final String topicName;
-    
+
     private Job job;
 
     public KafkaCollector(Properties props, String jobName, String topicName) throws IOException
@@ -322,7 +355,7 @@ public class CamusSweeper extends Configured implements Tool
       this.props = props;
       this.topicName = topicName;
       this.targetFileSize = props.containsKey(TARGET_FILE_SIZE) ? Long.parseLong(props.getProperty(TARGET_FILE_SIZE)) : TARGET_FILE_SIZE_DEFAULT;
-      
+
       job = new Job(getConf());
       job.setJarByClass(CamusSweeper.class);
       job.setJobName(jobName);
@@ -356,14 +389,14 @@ public class CamusSweeper extends Configured implements Tool
       FileOutputFormat.setOutputPath(job, tmpPath);
       ((CamusSweeperJob) Class.forName(props.getProperty("camus.sweeper.io.configurer.class"))
           .newInstance()).setLogger(log).configureJob(topicName, job);
-      
+
       long dus = 0;
       for (Path p : inputPaths)
         dus += fs.getContentSummary(p).getLength();
-      
+
       int maxFiles = job.getConfiguration().getInt("max.files", 24);
       int numTasks = Math.min((int) (dus / targetFileSize) + 1, maxFiles);
-      
+
       if (job.getNumReduceTasks() != 0){
         int numReducers;
         if (job.getConfiguration().get("reducer.count") != null)
@@ -378,13 +411,13 @@ public class CamusSweeper extends Configured implements Tool
         job.setNumReduceTasks(numReducers);
       } else {
         long targetSplitSize = dus / numTasks;
-        
+
         log.info("Setting target split size " + targetSplitSize);
-        
+
         job.getConfiguration().setLong("mapred.max.split.size", targetSplitSize);
         job.getConfiguration().setLong("mapred.min.split.size", targetSplitSize);
-      }    
-      
+      }
+
       job.submit();
       runningJobs.add(job);
       log.info("job running: " + job.getTrackingURL() + " for: " + jobName);
@@ -410,7 +443,7 @@ public class CamusSweeper extends Configured implements Tool
 
       log.info("Swapping " + tmpPath + " to " + outputPath);
       mkdirs(fs, outputPath.getParent(), perm);
-  
+
       if (!fs.rename(tmpPath, outputPath))
       {
         fs.rename(oldPath, outputPath);
@@ -424,11 +457,11 @@ public class CamusSweeper extends Configured implements Tool
         fs.delete(oldPath, true);
       }
     }
-    
+
     protected String getJobName() {
       return jobName;
     }
-    
+
     protected String getTopicName() {
       return topicName;
     }
@@ -436,26 +469,26 @@ public class CamusSweeper extends Configured implements Tool
     protected Job getJob() {
       return job;
     }
-    
+
     protected Properties getProps() {
       return this.props;
     }
   }
-  
+
   private void mkdirs(FileSystem fs, Path path, FsPermission perm) throws IOException{
     log.info("mkdir: " + path);
     if (! fs.exists(path.getParent()))
       mkdirs(fs, path.getParent(), perm);
     fs.mkdirs(path, perm);
   }
-  
+
   private Pattern compileMultiPattern(Collection<String> list){
     String patternStr = "(";
-    
+
     for (String str : list){
       patternStr += str + "|";
     }
-    
+
     patternStr = patternStr.substring(0, patternStr.length() - 1) + ")";
     return Pattern.compile(patternStr);
   }
@@ -471,7 +504,7 @@ public class CamusSweeper extends Configured implements Tool
         this.whitelist = Pattern.compile(".*");  //whitelist everything
       else
         this.whitelist = compileMultiPattern(whitelist);
-      
+
       if (blacklist.isEmpty())
         this.blacklist = Pattern.compile("a^");  //blacklist nothing
       else
