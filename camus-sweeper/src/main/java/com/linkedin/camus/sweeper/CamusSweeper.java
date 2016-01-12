@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -551,6 +553,35 @@ public class CamusSweeper extends Configured implements Tool
     }
   }
 
+  /**
+   * Exits the JVM, trying to do it nicely, otherwise doing it nastily.
+   *
+   * @param status  the exit status, zero for OK, non-zero for error
+   * @param maxDelay  the maximum delay in milliseconds
+   */
+  public static void forceExitAfter(final int status, long maxDelayMillis)
+  {
+    try {
+      // setup a timer, so if nice exit fails, the nasty exit happens
+      Timer timer = new Timer();
+      timer.schedule(new TimerTask() {
+        @Override
+        public void run() {
+          Runtime.getRuntime().halt(status);
+        }
+      }, maxDelayMillis);
+      // try to exit nicely
+      System.exit(status);
+
+    } catch (Throwable ex) {
+      // exit nastily if we have a problem
+      Runtime.getRuntime().halt(status);
+    } finally {
+      // should never get here
+      Runtime.getRuntime().halt(status);
+    }
+  }
+
   public int run(String[] args) throws Exception
   {
     Options options = new Options();
@@ -587,7 +618,18 @@ public class CamusSweeper extends Configured implements Tool
     props.putAll(cmd.getOptionProperties("D"));
 
     init();
+
+    boolean forcedExit = Boolean.parseBoolean(props.getProperty("camus.forced.exit.enabled"));
+
+    if (forcedExit) {
+        long forcedExitTimeout = Long.parseLong(props.getProperty("camus.forced.exit.timeout"));
+        int forcedExitStatus = 0;
+
+        forceExitAfter(forcedExitStatus, forcedExitTimeout);
+    }
+
     run();
+
     return 0;
   }
 
