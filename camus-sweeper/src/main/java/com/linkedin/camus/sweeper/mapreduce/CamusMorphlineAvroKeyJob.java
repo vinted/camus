@@ -68,27 +68,27 @@ public class CamusMorphlineAvroKeyJob extends CamusSweeperJob
         // finding the newest file from our input. this file will contain the newest version of our avro
         // schema.
         Schema inputSchema = getOverridenTopicSchema(job, topic);
+        String schemaRegistryHost = getConfValue(job, topic, "camus.sweeper.schema.registry.host");
 
         if (inputSchema == null) {
             inputSchema = getNewestInputSchemaFromSource(job, topic);
         }
 
-        // checking if we have a key schema used for deduping. if we don't then we make this a map only
-        // job and set the key schema
-        // to the newest input schema
-        String keySchemaStr = getConfValue(job, topic, "camus.sweeper.avro.key.schema");
-        Schema keySchema;
-        if (keySchemaStr == null || keySchemaStr.isEmpty()) {
-            job.setNumReduceTasks(0);
-            keySchema = inputSchema;
-        } else {
-            keySchema = new Schema.Parser().parse(keySchemaStr);
+        // Download a key schema used for deduping
+        try {
+            URI deduplicateSchemaURI = new URI(schemaRegistryHost + "/" + topic + "/latest.deduplication");
+            log.info("Fetching latest deduplicate schema from URI " + deduplicateSchemaURI);
+            String keySchemaStr = fetchContentFromURI(deduplicateSchemaURI);
+            Schema keySchema = new Schema.Parser().parse(keySchemaStr);
+
+            setupSchemas(topic, job, inputSchema, keySchema);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (java.net.URISyntaxException e) {
+            throw new RuntimeException(e);
         }
 
-        setupSchemas(topic, job, inputSchema, keySchema);
-
         try {
-            String schemaRegistryHost = getConfValue(job, topic, "camus.sweeper.schema.registry.host");
             URI morphlinesURI = new URI(schemaRegistryHost + "/" + topic + "/latest.morphlines");
             log.info("Fetching latest morphlines from URI " + morphlinesURI);
             String latestMorphlinePayload = fetchContentFromURI(morphlinesURI);
