@@ -23,11 +23,17 @@ public class VintedPartitioner extends DefaultPartitioner {
         long outfilePartitionMs = EtlMultiOutputFormat.getEtlOutputFileTimePartitionMins(context) * 60000L;
         String portal = key.getPartitionMap().get(PORTAL).toString();
         // get output date formatter for specific portal
-        String portalTimeZone = context.getConfiguration().get(ETL_PORTAL_TIMEZONE + "." + portal, null);
+        String portalTimeZone = context.getConfiguration().get(ETL_PORTAL_TIMEZONE + "." + portal);
+
         if (portalTimeZone == null) {
-            portalTimeZone = context.getConfiguration().get(EtlMultiOutputFormat.ETL_DEFAULT_TIMEZONE, "America/Los_Angeles");
+            throw new RuntimeException("Missing timezone configuration for portal=" + portal);
         }
-        DateTimeFormatter outputDateFormatter = DateUtils.getDateTimeFormatter(OUTPUT_DATE_FORMAT,DateTimeZone.forID(portalTimeZone));
-        return ""+DateUtils.getPartition(outfilePartitionMs, key.getTime(), outputDateFormatter.getZone());
+
+        DateTimeFormatter outputDateFormatter = DateUtils.getDateTimeFormatter(
+            OUTPUT_DATE_FORMAT,
+            DateTimeZone.forID(portalTimeZone)
+        );
+
+        return "" + DateUtils.getPartition(outfilePartitionMs, key.getTime(), outputDateFormatter.getZone());
     }
 }
