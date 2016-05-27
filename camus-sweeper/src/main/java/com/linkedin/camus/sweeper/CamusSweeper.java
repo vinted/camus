@@ -15,6 +15,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -216,16 +217,18 @@ public class CamusSweeper extends Configured implements Tool
       try
       {
         runCollectorForTopicDir(fs, topicName, new Path(topic.getPath(), sourceSubdir), destinationPath);
+        log.info("Shutting down priority executor");
+        executorService.shutdown();
       }
       catch (Exception e)
       {
         System.err.println("unable to process " + topicName + " skipping...");
         e.printStackTrace();
+        executorService.shutdown();
+        throw e;
       }
     }
 
-    log.info("Shutting down priority executor");
-    executorService.shutdown();
     while (!executorService.isTerminated())
     {
       executorService.awaitTermination(30, TimeUnit.SECONDS);
@@ -274,8 +277,18 @@ public class CamusSweeper extends Configured implements Tool
 
     List<Properties> jobPropsList = planner.createSweeperJobProps(topic, topicSourceDir, topicDestDir, fs);
 
-    for (Properties jobProps : jobPropsList){
+    for (Properties jobProps : jobPropsList) {
       tasksToComplete.add(runCollector(jobProps, topic));
+    }
+
+    for (Future<?> task : tasksToComplete) {
+      try {
+        task.get();
+      } catch (InterruptedException e) {
+        throw e;
+      } catch (ExecutionException e) {
+        throw e;
+      }
     }
 
     log.info("Finishing processing for topic " + topic);
