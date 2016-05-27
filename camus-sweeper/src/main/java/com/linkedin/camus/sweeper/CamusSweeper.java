@@ -15,6 +15,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -58,6 +59,7 @@ public class CamusSweeper extends Configured implements Tool
 
   private Properties props;
   private ExecutorService executorService;
+  private ExecutorCompletionService completionService;
   private FsPermission perm = new FsPermission(FsAction.ALL, FsAction.READ_EXECUTE, FsAction.READ_EXECUTE);
 
   private String destSubdir;
@@ -69,6 +71,7 @@ public class CamusSweeper extends Configured implements Tool
 
   private Map<String, Integer> priorityTopics = new HashMap<String, Integer>();
 
+  private ArrayList<Future<?>> tasksToComplete = new ArrayList<Future<?>>();
 
   public CamusSweeper()
   {
@@ -160,6 +163,7 @@ public class CamusSweeper extends Configured implements Tool
     int numThreads = Integer.parseInt(props.getProperty("num.threads", DEFAULT_NUM_THREADS));
 
     executorService = executorService = new PriorityExecutor(numThreads);
+    completionService =  new ExecutorCompletionService(executorService);
 
     String fromLocation = (String) props.getProperty("camus.sweeper.source.dir");
     String destLocation = (String) props.getProperty("camus.sweeper.dest.dir", "");
@@ -214,16 +218,25 @@ public class CamusSweeper extends Configured implements Tool
       log.info("Processing topic " + topicName);
 
       Path destinationPath = new Path(destLocation + "/" + topics.get(topic) + "/" + topic.getPath().getName() + "/" + destSubdir);
-      try
-      {
-        runCollectorForTopicDir(fs, topicName, new Path(topic.getPath(), sourceSubdir), destinationPath);
-      }
-      catch (Exception e)
-      {
-        System.err.println("unable to process " + topicName + " skipping...");
-        e.printStackTrace();
-        executorService.shutdown();
-        throw e;
+
+      runCollectorForTopicDir(fs, topicName, new Path(topic.getPath(), sourceSubdir), destinationPath);
+    }
+
+    Future<?> completedTask;
+    int remainingTaskCount = tasksToComplete.size();
+
+    while (remainingTaskCount > 0) {
+      completedTask = completionService.take();
+      remainingTaskCount--;
+
+      try {
+          completedTask.get();
+      } catch (ExecutionException e) {
+          // If a task completed with an exception shutdown all other tasks and exit
+          // re-raise the exception to make the parent job fail.
+          executorService.shutdown();
+
+          throw new Exception(e.getCause());
       }
     }
 
@@ -276,22 +289,12 @@ public class CamusSweeper extends Configured implements Tool
   private void runCollectorForTopicDir(FileSystem fs, String topic, Path topicSourceDir, Path topicDestDir) throws Exception
   {
     log.info("Running collector for topic " + topic + " source:" + topicSourceDir + " dest:" + topicDestDir);
-    ArrayList<Future<?>> tasksToComplete = new ArrayList<Future<?>>();
 
     List<Properties> jobPropsList = planner.createSweeperJobProps(topic, topicSourceDir, topicDestDir, fs);
 
     for (Properties jobProps : jobPropsList) {
-      tasksToComplete.add(runCollector(jobProps, topic));
-    }
 
-    for (Future<?> task : tasksToComplete) {
-      try {
-        task.get();
-      } catch (InterruptedException e) {
-        throw e;
-      } catch (ExecutionException e) {
-        throw e;
-      }
+      tasksToComplete.add(runCollector(jobProps, topic));
     }
 
     log.info("Finishing processing for topic " + topic);
@@ -308,7 +311,8 @@ public class CamusSweeper extends Configured implements Tool
 
     log.info("Processing " + props.get("input.paths"));
 
-    return executorService.submit(new KafkaCollectorRunner(jobName, props, errorMessages, topic));
+    // return true if KafkaCollectorRunner task finishes
+    return completionService.submit(new KafkaCollectorRunner(jobName, props, errorMessages, topic), true);
   }
 
   public class KafkaCollectorRunner implements Runnable, Important
