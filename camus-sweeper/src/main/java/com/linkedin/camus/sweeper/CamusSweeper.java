@@ -217,8 +217,6 @@ public class CamusSweeper extends Configured implements Tool
       try
       {
         runCollectorForTopicDir(fs, topicName, new Path(topic.getPath(), sourceSubdir), destinationPath);
-        log.info("Shutting down priority executor");
-        executorService.shutdown();
       }
       catch (Exception e)
       {
@@ -227,6 +225,11 @@ public class CamusSweeper extends Configured implements Tool
         executorService.shutdown();
         throw e;
       }
+    }
+
+    if (!executorService.isTerminated()) {
+      log.info("Shutting down priority executor");
+      executorService.shutdown();
     }
 
     while (!executorService.isTerminated())
