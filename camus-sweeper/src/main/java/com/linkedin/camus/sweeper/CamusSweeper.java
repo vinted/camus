@@ -19,6 +19,13 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
+import java.net.URI;
+
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpEntity;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.client.methods.HttpGet;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -157,6 +164,10 @@ public class CamusSweeper extends Configured implements Tool
   {
     log.info("Starting kafka sweeper");
     int numThreads = Integer.parseInt(props.getProperty("num.threads", DEFAULT_NUM_THREADS));
+
+    log.info("Checking schema-registry connectivity");
+    String schemaRegistryHost = (String) props.getProperty("camus.sweeper.schema.registry.host");
+    testSchemaRegistryConnectivity(schemaRegistryHost);
 
     executorService = executorService = new PriorityExecutor(numThreads);
 
@@ -631,6 +642,24 @@ public class CamusSweeper extends Configured implements Tool
     run();
 
     return 0;
+  }
+
+  private static final Integer HTTP_SUCCESS_CODE = 200;
+
+  private void testSchemaRegistryConnectivity(String schemaRegistryHost) throws Exception
+  {
+    URI schemaIndexAddress = new URI(schemaRegistryHost + "/events.warehouse.json");
+    HttpResponse indexResponse = getResponse(schemaIndexAddress);
+
+    assert(indexResponse.getStatusLine().getStatusCode() == HTTP_SUCCESS_CODE);
+  }
+
+  private HttpResponse getResponse(URI schemaIndexAddress) throws IOException
+  {
+    DefaultHttpClient httpClient = new DefaultHttpClient();
+
+    HttpGet requestMethod = new HttpGet(schemaIndexAddress);
+    return httpClient.execute(requestMethod);
   }
 
   public static void main(String args[]) throws Exception
