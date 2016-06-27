@@ -15,10 +15,16 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+
+import java.net.URI;
+
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpEntity;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.client.methods.HttpGet;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -159,6 +165,10 @@ public class CamusSweeper extends Configured implements Tool
     log.info("Starting kafka sweeper");
     int numThreads = Integer.parseInt(props.getProperty("num.threads", DEFAULT_NUM_THREADS));
 
+    log.info("Checking schema-registry connectivity");
+    String schemaRegistryHost = (String) props.getProperty("camus.sweeper.schema.registry.host");
+    testSchemaRegistryConnectivity(schemaRegistryHost);
+
     executorService = executorService = new PriorityExecutor(numThreads);
 
     String fromLocation = (String) props.getProperty("camus.sweeper.source.dir");
@@ -222,16 +232,11 @@ public class CamusSweeper extends Configured implements Tool
       {
         System.err.println("unable to process " + topicName + " skipping...");
         e.printStackTrace();
-        executorService.shutdown();
-        throw e;
       }
     }
 
-    if (!executorService.isTerminated()) {
-      log.info("Shutting down priority executor");
-      executorService.shutdown();
-    }
-
+    log.info("Shutting down priority executor");
+    executorService.shutdown();
     while (!executorService.isTerminated())
     {
       executorService.awaitTermination(30, TimeUnit.SECONDS);
@@ -280,18 +285,8 @@ public class CamusSweeper extends Configured implements Tool
 
     List<Properties> jobPropsList = planner.createSweeperJobProps(topic, topicSourceDir, topicDestDir, fs);
 
-    for (Properties jobProps : jobPropsList) {
+    for (Properties jobProps : jobPropsList){
       tasksToComplete.add(runCollector(jobProps, topic));
-    }
-
-    for (Future<?> task : tasksToComplete) {
-      try {
-        task.get();
-      } catch (InterruptedException e) {
-        throw e;
-      } catch (ExecutionException e) {
-        throw e;
-      }
     }
 
     log.info("Finishing processing for topic " + topic);
@@ -647,6 +642,24 @@ public class CamusSweeper extends Configured implements Tool
     run();
 
     return 0;
+  }
+
+  private static final Integer HTTP_SUCCESS_CODE = 200;
+
+  private void testSchemaRegistryConnectivity(String schemaRegistryHost) throws Exception
+  {
+    URI schemaIndexAddress = new URI(schemaRegistryHost + "/events.warehouse.json");
+    HttpResponse indexResponse = getResponse(schemaIndexAddress);
+
+    assert(indexResponse.getStatusLine().getStatusCode() == HTTP_SUCCESS_CODE);
+  }
+
+  private HttpResponse getResponse(URI schemaIndexAddress) throws IOException
+  {
+    DefaultHttpClient httpClient = new DefaultHttpClient();
+
+    HttpGet requestMethod = new HttpGet(schemaIndexAddress);
+    return httpClient.execute(requestMethod);
   }
 
   public static void main(String args[]) throws Exception
