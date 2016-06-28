@@ -71,6 +71,8 @@ import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormatter;
 
+import com.vinted.camus.schemaregistry.ConnectivityCheck;
+
 public class CamusJob extends Configured implements Tool {
 
 	public static final String ETL_EXECUTION_BASE_PATH = "etl.execution.base.path";
@@ -95,6 +97,9 @@ public class CamusJob extends Configured implements Tool {
 	public static final String KAFKA_HOST_PORT = "kafka.host.port";
 	public static final String KAFKA_TIMEOUT_VALUE = "kafka.timeout.value";
 	public static final String LOG4J_CONFIGURATION = "log4j.configuration";
+  public static final String SCHEMA_REGISTRY_HOST = "camus.etl.schema.registry.host";
+  public static final String SCHEMA_REGISTRY_ENDPOINT = "camus.etl.schema.registry.endpoint";
+  public static final String SCHEMA_REGISTRY_CONNECTIVITY_CHECK = "camus.etl.schema.registry.connectivity.check";
 	private static org.apache.log4j.Logger log;
 
 	private final Properties props;
@@ -233,7 +238,16 @@ public class CamusJob extends Configured implements Tool {
 		Job job = createJob(props);
 		if (getLog4jConfigure(job)) {
 			DOMConfigurator.configure("log4j.xml");
-		}
+    }
+
+    if (Boolean.parseBoolean(props.getProperty(SCHEMA_REGISTRY_CONNECTIVITY_CHECK))) {
+      log.info("Checking schema-registry connectivity");
+      String schemaRegistryHost = (String) props.getProperty(SCHEMA_REGISTRY_HOST);
+      String schemaRegistryEndpoint = (String) props.getProperty(SCHEMA_REGISTRY_ENDPOINT);
+      URI schemaIndexAddress = new URI(schemaRegistryHost + schemaRegistryEndpoint);
+      ConnectivityCheck.check(schemaIndexAddress);
+    }
+
 		FileSystem fs = FileSystem.get(job.getConfiguration());
 
 		log.info("Dir Destination set to: "
