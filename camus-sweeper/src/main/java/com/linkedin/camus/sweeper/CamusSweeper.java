@@ -21,11 +21,6 @@ import java.util.regex.Pattern;
 
 import java.net.URI;
 
-import org.apache.http.HttpResponse;
-import org.apache.http.HttpEntity;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.client.methods.HttpGet;
-
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -54,11 +49,15 @@ import com.linkedin.camus.sweeper.utils.PriorityExecutor;
 import com.linkedin.camus.sweeper.utils.PriorityExecutor.Important;
 import com.linkedin.camus.sweeper.utils.Utils;
 
+import com.vinted.camus.schemaregistry.ConnectivityCheck;
+
 @SuppressWarnings("deprecation")
 public class CamusSweeper extends Configured implements Tool
 {
   private static final String DEFAULT_NUM_THREADS = "5";
   private static final String CAMUS_SWEEPER_PRIORITY_LIST = "camus.sweeper.priority.list";
+  private static final String SCHEMA_REGISTRY_HOST = "camus.sweeper.schema.registry.host";
+  private static final String SCHEMA_REGISTRY_ENDPOINT = "camus.sweeper.schema.registry.endpoint";
   private List<SweeperError> errorMessages;
   private List<Job> runningJobs;
 
@@ -166,8 +165,10 @@ public class CamusSweeper extends Configured implements Tool
     int numThreads = Integer.parseInt(props.getProperty("num.threads", DEFAULT_NUM_THREADS));
 
     log.info("Checking schema-registry connectivity");
-    String schemaRegistryHost = (String) props.getProperty("camus.sweeper.schema.registry.host");
-    testSchemaRegistryConnectivity(schemaRegistryHost);
+    String schemaRegistryHost = (String) props.getProperty(SCHEMA_REGISTRY_HOST);
+    String schemaRegistryEndpoint = (String) props.getProperty(SCHEMA_REGISTRY_ENDPOINT);
+    URI schemaIndexAddress = new URI(schemaRegistryHost + schemaRegistryEndpoint);
+    ConnectivityCheck.check(schemaIndexAddress);
 
     executorService = executorService = new PriorityExecutor(numThreads);
 
@@ -642,24 +643,6 @@ public class CamusSweeper extends Configured implements Tool
     run();
 
     return 0;
-  }
-
-  private static final Integer HTTP_SUCCESS_CODE = 200;
-
-  private void testSchemaRegistryConnectivity(String schemaRegistryHost) throws Exception
-  {
-    URI schemaIndexAddress = new URI(schemaRegistryHost + "/events.warehouse.json");
-    HttpResponse indexResponse = getResponse(schemaIndexAddress);
-
-    assert(indexResponse.getStatusLine().getStatusCode() == HTTP_SUCCESS_CODE);
-  }
-
-  private HttpResponse getResponse(URI schemaIndexAddress) throws IOException
-  {
-    DefaultHttpClient httpClient = new DefaultHttpClient();
-
-    HttpGet requestMethod = new HttpGet(schemaIndexAddress);
-    return httpClient.execute(requestMethod);
   }
 
   public static void main(String args[]) throws Exception

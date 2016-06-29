@@ -97,6 +97,7 @@ public class CamusJobTest {
         props.setProperty(EtlMultiOutputFormat.ETL_DESTINATION_PATH, destinationPath);
         props.setProperty(CamusJob.ETL_EXECUTION_BASE_PATH, path + EXECUTION_BASE_PATH);
         props.setProperty(CamusJob.ETL_EXECUTION_HISTORY_PATH, path + EXECUTION_HISTORY_PATH);
+        props.setProperty(CamusJob.SCHEMA_REGISTRY_CONNECTIVITY_CHECK, "false");
 
         props.setProperty(EtlInputFormat.CAMUS_MESSAGE_DECODER_CLASS, JsonStringMessageDecoder.class.getName());
         props.setProperty(EtlMultiOutputFormat.ETL_RECORD_WRITER_PROVIDER_CLASS,
