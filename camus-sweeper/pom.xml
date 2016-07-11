@@ -108,6 +108,7 @@
                                     <include>org.kitesdk:*</include>
                                     <include>com.codahale.metrics:*</include>
                                     <include>com.typesafe:*</include>
+                                    <include>com.linkedin.camus:camus-schema-registry:*</include>
                                 </includes>
                             </artifactSet>
                         </configuration>
