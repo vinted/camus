@@ -1,0 +1,11 @@
+language: java
+jdk:
+  - oraclejdk8
+  - oraclejdk7
+branches:
+  only:
+    - master
+install: "mvn validate -DskipTests=true -Dcamus.version=0.0.0"
+script: "mvn clean test -Dcamus.version=0.0.0 -B"
+before_install:
+  - sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
