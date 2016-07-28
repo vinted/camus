@@ -21,6 +21,7 @@ target
 **/.idea
 .idea
 **/dependency-reduced-pom.xml
+.auth_token
 
 # target dirs
 camus-api/target/
