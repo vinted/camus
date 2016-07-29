@@ -45,10 +45,10 @@ echo "Uploading Camus ETL jar for $tag_name"
 
 camus_etl_file="camus-etl-kafka-$tag_name-shaded.jar"
 
-curl -s -H "Content-Type: application/zip" -H "Authorization: token $oauth_key" -X POST --data "@camus-etl-kafka/target/$camus_etl_file" https://uploads.github.com/repos/${PROJECT}/releases/$release_id/assets?name=$camus_etl_file > /dev/null 2>&1
+curl -s -H "Content-Type: application/zip" -H "Authorization: token $oauth_key" -X POST -T camus-etl-kafka/target/$camus_etl_file https://uploads.github.com/repos/${PROJECT}/releases/$release_id/assets?name=$camus_etl_file > /dev/null 2>&1
 
 echo "Uploading Camus Sweeper jar for $tag_name"
 
 camus_sweeper_file="camus-sweeper-$tag_name.jar"
 
-curl -s -H "Content-Type: application/zip" -H "Authorization: token $oauth_key" -X POST --data "@camus-sweeper/target/$camus_sweeper_file" https://uploads.github.com/repos/${PROJECT}/releases/$release_id/assets?name=$camus_sweeper_file > /dev/null 2>&1
+curl -s -H "Content-Type: application/zip" -H "Authorization: token $oauth_key" -X POST -T camus-sweeper/target/$camus_sweeper_file https://uploads.github.com/repos/${PROJECT}/releases/$release_id/assets?name=$camus_sweeper_file > /dev/null 2>&1
