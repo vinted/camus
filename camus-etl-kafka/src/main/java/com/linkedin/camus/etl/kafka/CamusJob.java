@@ -8,12 +8,15 @@ import com.linkedin.camus.etl.kafka.common.Source;
 import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
 import com.linkedin.camus.etl.kafka.mapred.EtlMapper;
 import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
+import com.linkedin.camus.etl.kafka.reporter.BaseReporter;
+import com.linkedin.camus.etl.kafka.reporter.TimeReporter;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.ClassNotFoundException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.text.NumberFormat;
@@ -60,6 +63,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
@@ -96,6 +100,7 @@ public class CamusJob extends Configured implements Tool {
 	public static final String KAFKA_HOST_URL = "kafka.host.url";
 	public static final String KAFKA_HOST_PORT = "kafka.host.port";
 	public static final String KAFKA_TIMEOUT_VALUE = "kafka.timeout.value";
+	public static final String CAMUS_REPORTER_CLASS = "etl.reporter.class";
 	public static final String LOG4J_CONFIGURATION = "log4j.configuration";
   public static final String SCHEMA_REGISTRY_HOST = "camus.etl.schema.registry.host";
   public static final String SCHEMA_REGISTRY_ENDPOINT = "camus.etl.schema.registry.endpoint";
@@ -534,7 +539,8 @@ public class CamusJob extends Configured implements Tool {
 	}
 
 	/**
-	 * Creates a diagnostic report mostly focused on timing breakdowns. Useful
+	 * Creates a diagnostic report based on provided logger
+	 * defaults to TimeLogger which focusses on timing breakdowns. Useful
 	 * for determining where to optimize.
 	 * 
 	 * @param job
@@ -542,113 +548,9 @@ public class CamusJob extends Configured implements Tool {
 	 * @throws IOException
 	 */
 	private void createReport(Job job, Map<String, Long> timingMap)
-			throws IOException {
-		StringBuilder sb = new StringBuilder();
-
-		sb.append("***********Timing Report*************\n");
-
-		sb.append("Job time (seconds):\n");
-
-		double preSetup = timingMap.get("pre-setup") / 1000;
-		double getSplits = timingMap.get("getSplits") / 1000;
-		double hadoop = timingMap.get("hadoop") / 1000;
-		double commit = timingMap.get("commit") / 1000;
-		double total = timingMap.get("total") / 1000;
-
-		sb.append(String.format("    %12s %6.1f (%s)\n", "pre setup", preSetup,
-				NumberFormat.getPercentInstance().format(preSetup / total)
-						.toString()));
-		sb.append(String.format("    %12s %6.1f (%s)\n", "get splits",
-				getSplits,
-				NumberFormat.getPercentInstance().format(getSplits / total)
-						.toString()));
-		sb.append(String.format("    %12s %6.1f (%s)\n", "hadoop job", hadoop,
-				NumberFormat.getPercentInstance().format(hadoop / total)
-						.toString()));
-		sb.append(String.format("    %12s %6.1f (%s)\n", "commit", commit,
-				NumberFormat.getPercentInstance().format(commit / total)
-						.toString()));
-
-		int minutes = (int) total / 60;
-		int seconds = (int) total % 60;
-
-		sb.append(String.format("Total: %d minutes %d seconds\n", minutes,
-				seconds));
-
-		JobClient client = new JobClient(new JobConf(job.getConfiguration()));
-
-		TaskReport[] tasks = client.getMapTaskReports(JobID.downgrade(job
-				.getJobID()));
-
-		double min = Long.MAX_VALUE, max = 0, mean = 0;
-		double minRun = Long.MAX_VALUE, maxRun = 0, meanRun = 0;
-		long totalTaskTime = 0;
-		TreeMap<Long, List<TaskReport>> taskMap = new TreeMap<Long, List<TaskReport>>();
-
-		for (TaskReport t : tasks) {
-			long wait = t.getStartTime() - timingMap.get("hadoop_start");
-			min = wait < min ? wait : min;
-			max = wait > max ? wait : max;
-			mean += wait;
-
-			long runTime = t.getFinishTime() - t.getStartTime();
-			totalTaskTime += runTime;
-			minRun = runTime < minRun ? runTime : minRun;
-			maxRun = runTime > maxRun ? runTime : maxRun;
-			meanRun += runTime;
-
-			if (!taskMap.containsKey(runTime)) {
-				taskMap.put(runTime, new ArrayList<TaskReport>());
-			}
-			taskMap.get(runTime).add(t);
-		}
-
-		mean /= tasks.length;
-		meanRun /= tasks.length;
-
-		// convert to seconds
-		min /= 1000;
-		max /= 1000;
-		mean /= 1000;
-		minRun /= 1000;
-		maxRun /= 1000;
-		meanRun /= 1000;
-
-		sb.append("\nHadoop job task times (seconds):\n");
-		sb.append(String.format("    %12s %6.1f\n", "min", minRun));
-		sb.append(String.format("    %12s %6.1f\n", "mean", meanRun));
-		sb.append(String.format("    %12s %6.1f\n", "max", maxRun));
-		sb.append(String.format("    %12s %6.1f/%.1f = %.2f\n", "skew",
-				meanRun, maxRun, meanRun / maxRun));
-
-		sb.append("\nTask wait time (seconds):\n");
-		sb.append(String.format("    %12s %6.1f\n", "min", min));
-		sb.append(String.format("    %12s %6.1f\n", "mean", mean));
-		sb.append(String.format("    %12s %6.1f\n", "max", max));
-
-		CounterGroup totalGrp = job.getCounters().getGroup("total");
-
-		long decode = totalGrp.findCounter("decode-time(ms)").getValue();
-		long request = totalGrp.findCounter("request-time(ms)").getValue();
-		long map = totalGrp.findCounter("mapper-time(ms)").getValue();
-		long mb = totalGrp.findCounter("data-read").getValue();
-
-		long other = totalTaskTime - map - request - decode;
-
-		sb.append("\nHadoop task breakdown:\n");
-		sb.append(String.format("    %12s %s\n", "kafka", NumberFormat
-				.getPercentInstance().format(request / (double) totalTaskTime)));
-		sb.append(String.format("    %12s %s\n", "decode", NumberFormat
-				.getPercentInstance().format(decode / (double) totalTaskTime)));
-		sb.append(String.format("    %12s %s\n", "map output", NumberFormat
-				.getPercentInstance().format(map / (double) totalTaskTime)));
-		sb.append(String.format("    %12s %s\n", "other", NumberFormat
-				.getPercentInstance().format(other / (double) totalTaskTime)));
-
-		sb.append(String.format("\n%16s %s\n", "Total MB read:",
-				mb / 1024 / 1024));
-
-		log.info(sb.toString());
+			throws IOException, ClassNotFoundException {
+		Class cls = job.getConfiguration().getClassByName(getReporterClass(job));
+		((BaseReporter)ReflectionUtils.newInstance(cls, job.getConfiguration())).report(job, timingMap);
 	}
 
 	/**
@@ -763,5 +665,9 @@ public class CamusJob extends Configured implements Tool {
 
 	public static boolean getLog4jConfigure(JobContext job) {
 		return job.getConfiguration().getBoolean(LOG4J_CONFIGURATION, false);
+	}
+
+	public static String getReporterClass(JobContext job) {
+		return job.getConfiguration().get(CAMUS_REPORTER_CLASS, "com.linkedin.camus.etl.kafka.reporter.TimeReporter");
 	}
 }
