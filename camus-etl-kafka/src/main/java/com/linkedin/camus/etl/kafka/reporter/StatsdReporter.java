@@ -17,9 +17,11 @@ public class StatsdReporter extends TimeReporter {
     public static final String STATSD_ENABLED = "statsd.enabled";
     public static final String STATSD_HOST = "statsd.host";
     public static final String STATSD_PORT = "statsd.port";
+    public static final String STATSD_PREFIX = "statsd.prefix";
+    public static final String STATSD_TAGS = "statsd.tags";
 
-    private static boolean statsdEnabled;
-    private static StatsDClient statsd;
+    public static final String DEFAULT_STATSD_PREFIX = "Camus";
+    public static final String DEFAULT_STATSD_TAGS = "camus:counters"; // comma separated
 
     public void report(Job job, Map<String, Long> timingMap) throws IOException {
         super.report(job, timingMap);
@@ -30,8 +32,9 @@ public class StatsdReporter extends TimeReporter {
         Counters counters = job.getCounters();
         if (getStatsdEnabled(job)) {
             StatsDClient statsd = new NonBlockingStatsDClient(
-                "Camus", getStatsdHost(job), getStatsdPort(job), new String[]{"camus:counters"}
+                getStatsdPrefix(job), getStatsdHost(job), getStatsdPort(job), getStatsdTags(job)
             );
+
             for (CounterGroup counterGroup: counters) {
                 for (Counter counter: counterGroup){
                     statsd.gauge(counterGroup.getDisplayName() + "." + counter.getDisplayName(), counter.getValue());
@@ -50,5 +53,19 @@ public class StatsdReporter extends TimeReporter {
 
     public static int getStatsdPort(Job job) {
         return job.getConfiguration().getInt(STATSD_PORT, 8125);
+    }
+
+    public static String getStatsdPrefix(Job job) {
+        return job.getConfiguration().get(STATSD_PREFIX, DEFAULT_STATSD_PREFIX);
+    }
+
+    public static String[] getStatsdTags(Job job) {
+        String tags = job.getConfiguration().get(STATSD_TAGS, DEFAULT_STATSD_TAGS);
+
+        if (tags.length() > 0) {
+            return tags.split(",");
+        } else {
+            return new String[] {};
+        }
     }
 }
