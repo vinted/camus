@@ -9,7 +9,7 @@ if [ -f $AUTH_TOKEN_FILE ];
 then
    oauth_key=`cat $AUTH_TOKEN_FILE`
 else
-   read -r -p "Did not find '$AUTH_TOKEN_FILE'. Please provide your GitHub OAuth key (create here https://github.com/settings/tokens): " oauth_key
+   read -r -p "Did not find '$AUTH_TOKEN_FILE'. Please provide your GitHub OAuth key (create here https://github.com/settings/tokens with `repo` scope): " oauth_key
 fi
 
 echo "Currently available release tags:"
