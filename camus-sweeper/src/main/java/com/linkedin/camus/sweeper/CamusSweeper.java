@@ -439,8 +439,8 @@ public class CamusSweeper extends Configured implements Tool
 
       if (!job.isSuccessful())
       {
-        System.err.println("hadoop job failed");
-        throw new RuntimeException("hadoop job failed.");
+        System.err.println("Hadoop job " + job.getJobID() + " failed");
+        throw new RuntimeException("Hadoop job " + job.getJobID() + " failed");
       }
 
       Path oldPath = null;
